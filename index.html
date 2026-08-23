@@ -157,7 +157,7 @@
   .modal-inner h3{margin:0 0 14px; color:var(--moss-dk);}
   .field{margin-bottom:11px;}
   .field label{display:block; font-size:.75rem; color:var(--muted); margin-bottom:4px; font-weight:600;}
-  .field input[type=text], .field input[type=number], .field input[type=url], .field textarea{
+  .field input[type=text], .field input[type=number], .field input[type=url], .field textarea, .field select{
     width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:.85rem;
     font-family:inherit; background:#fdfcf8;
   }
@@ -228,6 +228,11 @@
       <button class="add-mini" id="addHotelPool">＋ 新增飯店</button>
     </div>
     <div class="col-section">
+      <div style="margin-bottom:8px;">
+        <select id="regionFilter" style="width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:.8rem; background:#fdfcf8;">
+          <option value="">全部地區</option>
+        </select>
+      </div>
       <div class="drop-zone" id="poolZone" data-date=""></div>
     </div>
   </div>
@@ -241,6 +246,26 @@
     <div class="field">
       <label>飯店名稱</label>
       <input type="text" id="h_name" required placeholder="例如：花蓮理想大地">
+    </div>
+    <div class="field">
+      <label>地區</label>
+      <select id="h_region">
+        <option value="">— 選擇地區 —</option>
+        <option value="札幌">札幌</option>
+        <option value="小樽">小樽</option>
+        <option value="函館">函館</option>
+        <option value="登別">登別</option>
+        <option value="洞爺湖">洞爺湖</option>
+        <option value="二世谷/新雪谷">二世谷/新雪谷</option>
+        <option value="旭川">旭川</option>
+        <option value="富良野/美瑛">富良野/美瑛</option>
+        <option value="層雲峽">層雲峽</option>
+        <option value="知床">知床</option>
+        <option value="網走">網走</option>
+        <option value="釧路">釧路</option>
+        <option value="帶廣">帶廣</option>
+        <option value="其他">其他</option>
+      </select>
     </div>
     <div class="row2">
       <div class="field">
@@ -307,6 +332,8 @@ if (isConfigured) {
 /* ============ 2. 日期範圍 ============ */
 const DATES = ["1/23","1/24","1/25","1/26","1/27","1/28","1/29","1/30","1/31"];
 const WEEK = ["五","六","日","一","二","三","四","五","六"];
+const REGIONS = ["札幌","小樽","函館","登別","洞爺湖","二世谷/新雪谷","旭川","富良野/美瑛","層雲峽","知床","網走","釧路","帶廣","其他"];
+let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
 let totalGuests = 8;
 
@@ -323,11 +350,17 @@ function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, to
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
   db.collection('trip_data').doc('hotelsFlat').onSnapshot(snap=>{
-    if(snap.exists){ hotels = snap.data().list || []; render(); }
+    if(snap.exists){ hotels = snap.data().list || []; }
+    render();
+  }, err=>{
+    console.error('讀取 hotelsFlat 失敗', err);
+    document.getElementById('statusText').textContent = '同步失敗（請檢查 Firestore 規則）';
+    document.getElementById('statusDot').style.background = '#c0392b';
   });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
-    if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; render(); }
-  });
+    if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
+    render();
+  }, err=>{ console.error('讀取 settings 失敗', err); });
   document.getElementById('statusText').textContent = '即時同步中';
 }
 function persist(){
@@ -343,6 +376,13 @@ function persist(){
 /* ============ 5. Render ============ */
 const board = document.getElementById('board');
 const poolZone = document.getElementById('poolZone');
+const regionFilterEl = document.getElementById('regionFilter');
+REGIONS.forEach(r => {
+  const opt = document.createElement('option');
+  opt.value = r; opt.textContent = r;
+  regionFilterEl.appendChild(opt);
+});
+regionFilterEl.addEventListener('change', () => { regionFilterValue = regionFilterEl.value; render(); });
 
 function adjustedPrice(h){
   const cap = Number(h.capacity)||0;
@@ -377,7 +417,8 @@ function render(){
   });
 
   poolZone.innerHTML = '';
-  const poolList = hotels.filter(h => !h.assignedDate);
+  let poolList = hotels.filter(h => !h.assignedDate);
+  if(regionFilterValue) poolList = poolList.filter(h => h.region === regionFilterValue);
   if(poolList.length===0) poolZone.classList.add('empty-hint'); else poolZone.classList.remove('empty-hint');
   poolList.forEach(h => poolZone.appendChild(renderHotelCard(h)));
   new Sortable(poolZone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
@@ -411,6 +452,7 @@ function renderHotelCard(h){
   const adj = adjustedPrice(h);
   el.innerHTML = `
     <div class="card-title">${escapeHtml(h.name)}</div>
+    ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
     <div class="card-meta">${metaBits.join('')}</div>
     ${h.price ? `<div class="price-tag">$${adj.toLocaleString()}（${totalGuests}人）
         <span class="orig">原價 $${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span>
@@ -483,6 +525,7 @@ function openHotelDialog(h){
   document.getElementById('hotelDialogTitle').textContent = h ? '編輯飯店' : '新增飯店';
   document.getElementById('h_id').value = h ? h.id : uid();
   document.getElementById('h_name').value = h ? h.name : '';
+  document.getElementById('h_region').value = h ? (h.region||'') : '';
   document.getElementById('h_capacity').value = h ? (h.capacity||'') : '';
   document.getElementById('h_price').value = h ? (h.price||'') : '';
   document.getElementById('h_breakfast').checked = h ? !!h.breakfast : false;
@@ -501,6 +544,7 @@ hotelForm.addEventListener('submit', () => {
     assignedDate: existing ? existing.assignedDate : null,
     chosen: existing ? existing.chosen : false,
     name: document.getElementById('h_name').value.trim(),
+    region: document.getElementById('h_region').value,
     capacity: document.getElementById('h_capacity').value,
     price: document.getElementById('h_price').value,
     breakfast: document.getElementById('h_breakfast').checked,
@@ -531,11 +575,10 @@ document.getElementById('exportBtn').onclick = () => {
 };
 
 /* ============ 10. 啟動 ============ */
+loadLocal();
+render();
 if(isConfigured && db){
   watchFirestore();
-} else {
-  loadLocal();
-  render();
 }
 </script>
 </body>
