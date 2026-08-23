@@ -45,12 +45,6 @@
   }
   header h1 small{font-weight:400; opacity:.75; font-size:.75rem;}
   .header-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
-  .name-box{display:flex; align-items:center; gap:6px;}
-  .name-box input{
-    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.3);
-    color:#fff; padding:6px 10px; border-radius:6px; font-size:.85rem; width:110px;
-  }
-  .name-box input::placeholder{color:rgba(255,255,255,.6);}
   .btn{
     border:none; border-radius:6px; padding:7px 12px; font-size:.82rem; font-weight:600;
     cursor:pointer; transition:transform .1s, opacity .15s;
@@ -179,10 +173,6 @@
   <h1>🗺️ 旅程訂房看板 <small>1/23 – 1/31</small></h1>
   <div class="header-right">
     <span style="font-size:.78rem;"><span class="status-dot" id="statusDot"></span><span id="statusText">連線中…</span></span>
-    <div class="name-box">
-      <span style="font-size:.8rem;">我是</span>
-      <input id="userNameInput" type="text" placeholder="輸入暱稱" maxlength="10">
-    </div>
     <button class="btn btn-gold" id="exportBtn">📋 複製總覽</button>
   </div>
 </header>
@@ -311,12 +301,6 @@ let hotels = {};   // { "1/23": [ {id,name,nights,capacity,price,breakfast,dinne
 let plans = {};     // { "1/23": [ {id,time,title,note,editor,ts}, ... ] }
 DATES.forEach(d => { hotels[d] = []; plans[d] = []; });
 
-/* ============ 3. 暱稱 ============ */
-const nameInput = document.getElementById('userNameInput');
-nameInput.value = localStorage.getItem('trip_username') || '';
-nameInput.addEventListener('change', () => localStorage.setItem('trip_username', nameInput.value.trim()));
-function getEditor(){ return nameInput.value.trim() || '匿名旅人'; }
-
 /* ============ 4. 本機儲存 fallback（未設定 Firebase 時）============ */
 const LOCAL_KEY = 'trip_planner_local_v1';
 function loadLocal(){
@@ -359,7 +343,7 @@ function render(){
     col.className = 'day-col';
     col.innerHTML = `
       <div class="day-head">
-        <div class="d1">${d}</div>
+        <div class="d1">${d}　<span style="color:var(--clay);">（週${WEEK[idx]}）</span></div>
         <div class="d2">Day ${idx+1}</div>
       </div>
       <div class="col-section">
@@ -412,7 +396,6 @@ function renderHotelCard(h, d){
       <button data-edit-hotel="${h.id}" data-date="${d}">編輯</button>
       <button class="del-btn" data-del-hotel="${h.id}" data-date="${d}">刪除</button>
     </div>
-    ${h.editor ? `<div class="meta-edit">最後編輯：${escapeHtml(h.editor)}</div>` : ''}
   `;
   el.querySelector('[data-pick]').onclick = () => toggleChosen(d, h.id);
   el.querySelector('[data-edit-hotel]').onclick = () => openHotelDialog(h, d);
@@ -432,7 +415,6 @@ function renderPlanCard(p, d){
       <button data-edit-plan="${p.id}" data-date="${d}">編輯</button>
       <button class="del-btn" data-del-plan="${p.id}" data-date="${d}">刪除</button>
     </div>
-    ${p.editor ? `<div class="meta-edit">最後編輯：${escapeHtml(p.editor)}</div>` : ''}
   `;
   el.querySelector('[data-edit-plan]').onclick = () => openPlanDialog(p, d);
   el.querySelector('[data-del-plan]').onclick = () => { if(confirm('確定刪除這筆行程嗎？')) deletePlan(d, p.id); };
@@ -443,16 +425,16 @@ function renderSummary(){
   const grid = document.getElementById('summary-grid');
   grid.innerHTML = '';
   let count = 0, total = 0;
-  DATES.forEach(d => {
+  DATES.forEach((d, idx) => {
     const chosen = (hotels[d]||[]).find(h => h.chosen);
     const item = document.createElement('div');
     if(chosen){
       count++; total += Number(chosen.price)||0;
       item.className = 'sum-item';
-      item.innerHTML = `<div class="sum-date">${d}</div><div class="sum-hotel">${escapeHtml(chosen.name)}</div>${chosen.price ? `<div class="sum-price">$${Number(chosen.price).toLocaleString()}</div>`:''}`;
+      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div class="sum-hotel">${escapeHtml(chosen.name)}</div>${chosen.price ? `<div class="sum-price">$${Number(chosen.price).toLocaleString()}</div>`:''}`;
     } else {
       item.className = 'sum-item empty';
-      item.innerHTML = `<div class="sum-date">${d}</div><div>尚未選定</div>`;
+      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div>尚未選定</div>`;
     }
     grid.appendChild(item);
   });
@@ -548,7 +530,6 @@ hotelForm.addEventListener('submit', (e) => {
     pros: document.getElementById('h_pros').value.trim(),
     cons: document.getElementById('h_cons').value.trim(),
     chosen: chosenState,
-    editor: getEditor(),
     ts: Date.now()
   };
   // 若原本存在別的日期(理論上不會，因為 startDate 固定)，先移除舊資料再放回
@@ -576,7 +557,6 @@ planForm.addEventListener('submit', (e) => {
     time: document.getElementById('p_time').value.trim(),
     title: document.getElementById('p_title').value.trim(),
     note: document.getElementById('p_note').value.trim(),
-    editor: getEditor(),
     ts: Date.now()
   };
   upsertPlan(data);
