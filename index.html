@@ -59,41 +59,29 @@
   .btn-gold{background:var(--gold); color:#2b2410;}
   .status-dot{width:8px; height:8px; border-radius:50%; background:#8fbf8f; display:inline-block; margin-right:5px;}
 
-  #summary{
-    margin:16px 18px 0; background:var(--card); border:1px solid var(--line);
-    border-radius:var(--radius); padding:14px 16px;
+  .total-box{
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.3);
+    border-radius:6px; padding:6px 12px; font-size:.82rem; color:#f3efe2;
   }
-  #summary h2{margin:0 0 10px; font-size:.95rem; color:var(--moss-dk); letter-spacing:.03em;}
-  #summary-grid{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;}
-  .sum-item{
-    flex:0 0 auto; min-width:118px; border-left:3px solid var(--gold);
-    background:var(--chosen); border-radius:6px; padding:8px 10px; font-size:.78rem;
-  }
-  .sum-item.empty{border-left-color:var(--line); background:#faf9f4; color:var(--muted);}
-  .sum-date{font-weight:700; color:var(--moss-dk); font-size:.8rem;}
-  .sum-hotel{margin-top:3px; font-weight:600;}
-  .sum-price{color:var(--clay); font-weight:700; margin-top:2px;}
-  #grand-total-line{margin-top:10px; font-size:.85rem; display:flex; gap:18px; flex-wrap:wrap;}
-  #grand-total-line b{color:var(--clay); font-size:1rem;}
+  .total-box b{color:var(--gold); font-size:.95rem;}
 
   #layout{
     display:flex; gap:14px; padding:16px 18px 40px; align-items:flex-start;
   }
   #board{
-    display:flex; gap:12px; overflow-x:auto; flex:1; min-width:0;
-    scroll-snap-type:x proximity; padding-bottom:8px;
+    display:flex; flex-direction:column; gap:12px; flex:1; min-width:0; padding-bottom:8px;
   }
   #pool-panel{
     flex:0 0 300px; background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-    display:flex; flex-direction:column; max-height:calc(100vh - 200px); position:sticky; top:78px;
+    display:flex; flex-direction:column; max-height:calc(100vh - 100px); position:sticky; top:78px;
   }
   #pool-panel .day-head{
     display:flex; justify-content:space-between; align-items:center;
   }
   .day-col{
-    flex:0 0 250px; scroll-snap-align:start;
+    display:flex; align-items:stretch;
     background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-    display:flex; flex-direction:column; max-height:calc(100vh - 200px);
+    overflow:hidden;
   }
   .day-head{
     padding:10px 12px; border-bottom:2px solid var(--moss);
@@ -103,21 +91,37 @@
   #pool-panel .day-head{border-bottom-color:var(--gold);}
   .day-head .d1{font-weight:800; color:var(--moss-dk); font-size:1rem;}
   .day-head .d2{font-size:.72rem; color:var(--muted);}
+
+  .day-side{
+    flex:0 0 108px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; padding:10px 8px; text-align:center; border-right:2px solid var(--moss);
+    background:linear-gradient(180deg,#fff,#faf8f0);
+  }
+  .day-side .d1{font-weight:800; color:var(--moss-dk); font-size:1.05rem; line-height:1.3;}
+  .day-side .d2{font-size:.72rem; color:var(--muted);}
+  .day-body{flex:1; display:flex; min-width:0;}
+  .day-section{flex:1; padding:10px 14px; border-right:1px solid var(--line); min-width:0;}
+  .day-section:last-child{border-right:none;}
+
   .col-section{padding:8px 10px; overflow-y:auto; flex:1;}
-  .col-section h3{
+  .col-section h3, .day-section h3{
     font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
-    margin:6px 2px; display:flex; justify-content:space-between; align-items:center;
+    margin:0 2px 8px; display:flex; justify-content:space-between; align-items:center;
   }
   .add-mini{
     background:var(--moss); border:none; color:#fff;
     border-radius:6px; padding:5px 10px; cursor:pointer; font-size:.75rem; font-weight:700;
   }
-  .drop-zone{min-height:60px;}
+  .drop-zone{min-height:50px; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;}
+  #pool-panel .drop-zone, .plan-zone{display:block;}
+  .hotel-card{flex:0 0 220px;}
   .drop-zone.empty-hint::before{
     content:"拖曳飯店卡片到這裡";
     display:block; text-align:center; font-size:.72rem; color:#c7c0a9;
     border:1.5px dashed var(--line); border-radius:8px; padding:16px 4px; margin-top:2px;
+    width:100%;
   }
+  .plan-zone.empty-hint::before{ content:"點「＋新增行程」開始安排這天的行程"; }
 
   .hotel-card, .plan-card{
     background:#fffdf8; border:1px solid var(--line); border-radius:8px;
@@ -182,8 +186,12 @@
     #pool-panel{flex:1 1 auto; width:100%; position:static; max-height:none;}
     #board{width:100%;}
   }
-  @media (max-width:600px){
-    .day-col{flex:0 0 78vw;}
+  @media (max-width:640px){
+    .day-col{flex-direction:column;}
+    .day-side{flex-direction:row; justify-content:center; gap:8px; border-right:none; border-bottom:2px solid var(--moss);}
+    .day-body{flex-direction:column;}
+    .day-section{border-right:none; border-bottom:1px solid var(--line);}
+    .day-section:last-child{border-bottom:none;}
     header h1{font-size:1rem;}
   }
 </style>
@@ -204,21 +212,15 @@
       <input id="rateInput" type="number" min="0" step="0.0001" value="0.219">
       <span>台幣</span>
     </div>
+    <div class="total-box">
+      已選 <b id="chosen-count">0</b>/9 天　住宿總額 NT$<b id="total-price">0</b>
+    </div>
     <button class="btn btn-gold" id="exportBtn">📋 複製總覽</button>
   </div>
 </header>
 
 <div id="config-banner">
   ⚠️ 尚未設定 Firebase,資料不會同步保存。請打開 <code>index.html</code>,把 <code>firebaseConfig</code> 換成你自己 Firebase 專案的設定值。
-</div>
-
-<div id="summary">
-  <h2>✅ 目前住宿總覽（已選定的飯店，已換算成全員人數金額）</h2>
-  <div id="summary-grid"></div>
-  <div id="grand-total-line">
-    <span>已選天數：<b id="chosen-count">0</b> / 9</span>
-    <span>住宿總金額（<span id="total-guests-label">8</span> 人）：NT$<b id="total-price">0</b></span>
-  </div>
 </div>
 
 <div id="layout">
@@ -248,6 +250,7 @@
   <form class="modal-inner" method="dialog" id="hotelForm">
     <h3 id="hotelDialogTitle">新增飯店候選</h3>
     <input type="hidden" id="h_id">
+    <input type="hidden" id="h_targetDate">
     <div class="field">
       <label>飯店名稱</label>
       <input type="text" id="h_name" required placeholder="例如：花蓮理想大地">
@@ -318,6 +321,51 @@
   </form>
 </dialog>
 
+<!-- 行程編輯視窗 -->
+<dialog id="planDialog">
+  <form class="modal-inner" method="dialog" id="planForm">
+    <h3>新增當天行程</h3>
+    <input type="hidden" id="p_id">
+    <input type="hidden" id="p_date">
+    <div class="field">
+      <label>時間（選填）</label>
+      <input type="text" id="p_time" placeholder="例如：09:00 或 上午">
+    </div>
+    <div class="field">
+      <label>地點／活動</label>
+      <input type="text" id="p_title" required placeholder="例如：小樽運河">
+    </div>
+    <div class="field">
+      <label>所在地區</label>
+      <select id="p_location">
+        <option value="">— 選擇地區 —</option>
+        <option value="札幌">札幌</option>
+        <option value="小樽">小樽</option>
+        <option value="函館">函館</option>
+        <option value="登別">登別</option>
+        <option value="洞爺湖">洞爺湖</option>
+        <option value="二世谷/新雪谷">二世谷/新雪谷</option>
+        <option value="旭川">旭川</option>
+        <option value="富良野/美瑛">富良野/美瑛</option>
+        <option value="層雲峽">層雲峽</option>
+        <option value="知床">知床</option>
+        <option value="網走">網走</option>
+        <option value="釧路">釧路</option>
+        <option value="帶廣">帶廣</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>備註</label>
+      <textarea id="p_note" placeholder="交通方式、注意事項等"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="planCancel">取消</button>
+      <button type="submit" class="save-btn">儲存</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 /* ============ 1. Firebase 設定 ============ */
 const firebaseConfig = {
@@ -347,6 +395,7 @@ const WEEK = ["五","六","日","一","二","三","四","五","六"];
 const REGIONS = ["札幌","小樽","函館","登別","洞爺湖","二世谷/新雪谷","旭川","富良野/美瑛","層雲峽","知床","網走","釧路","帶廣","其他"];
 let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
+let plans = [];        // 扁平陣列: {id,date,time,title,location,note}
 let totalGuests = 8;
 let jpyRate = 0.219; // 1 日圓 = 多少台幣
 
@@ -355,10 +404,10 @@ const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; plans = d.plans || []; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, totalGuests, jpyRate})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, plans, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -370,6 +419,10 @@ function watchFirestore(){
     document.getElementById('statusText').textContent = '同步失敗（請檢查 Firestore 規則）';
     document.getElementById('statusDot').style.background = '#c0392b';
   });
+  db.collection('trip_data').doc('plansFlat').onSnapshot(snap=>{
+    if(snap.exists){ plans = snap.data().list || []; }
+    render();
+  }, err=>{ console.error('讀取 plansFlat 失敗', err); });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
     if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
     if(snap.exists && snap.data().jpyRate){ jpyRate = snap.data().jpyRate; }
@@ -380,6 +433,7 @@ function watchFirestore(){
 function persist(){
   if(isConfigured && db){
     db.collection('trip_data').doc('hotelsFlat').set({list: hotels});
+    db.collection('trip_data').doc('plansFlat').set({list: plans});
     db.collection('trip_data').doc('settings').set({totalGuests, jpyRate}, {merge:true});
   } else {
     saveLocal();
@@ -412,7 +466,6 @@ function adjustedPrice(h){
 
 function render(){
   document.getElementById('guestsInput').value = totalGuests;
-  document.getElementById('total-guests-label').textContent = totalGuests;
   document.getElementById('rateInput').value = jpyRate;
 
   board.innerHTML = '';
@@ -420,20 +473,37 @@ function render(){
     const col = document.createElement('div');
     col.className = 'day-col';
     col.innerHTML = `
-      <div class="day-head">
-        <div class="d1">${d}　<span style="color:var(--clay);">（週${WEEK[idx]}）</span></div>
+      <div class="day-side">
+        <div class="d1">${d}<br><span style="color:var(--clay); font-size:.82rem;">（週${WEEK[idx]}）</span></div>
         <div class="d2">Day ${idx+1}</div>
       </div>
-      <div class="col-section">
-        <div class="drop-zone" data-date="${d}"></div>
+      <div class="day-body">
+        <div class="day-section">
+          <h3>🏨 飯店候選 <button class="add-mini" data-add-hotel="${d}">＋新增飯店</button></h3>
+          <div class="drop-zone hotel-drop" data-date="${d}"></div>
+        </div>
+        <div class="day-section">
+          <h3>📍 當天行程 <button class="add-mini" data-add-plan="${d}">＋新增行程</button></h3>
+          <div class="drop-zone plan-zone" data-date="${d}"></div>
+        </div>
       </div>
     `;
     board.appendChild(col);
-    const zone = col.querySelector('.drop-zone');
+
+    const hzone = col.querySelector('.hotel-drop');
     const list = hotels.filter(h => h.assignedDate === d);
-    if(list.length===0) zone.classList.add('empty-hint');
-    list.forEach(h => zone.appendChild(renderHotelCard(h)));
-    new Sortable(zone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
+    if(list.length===0) hzone.classList.add('empty-hint');
+    list.forEach(h => hzone.appendChild(renderHotelCard(h)));
+    new Sortable(hzone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
+
+    const pzone = col.querySelector('.plan-zone');
+    const plist = plans.filter(p => p.date === d);
+    if(plist.length===0) pzone.classList.add('empty-hint');
+    plist.forEach(p => pzone.appendChild(renderPlanCard(p)));
+    new Sortable(pzone, { group:'plans-'+d, animation:150, onEnd: ()=>reorderPlans(d, pzone) });
+
+    col.querySelector('[data-add-hotel]').onclick = () => openHotelDialog(null, d);
+    col.querySelector('[data-add-plan]').onclick = () => openPlanDialog(null, d);
   });
 
   poolZone.innerHTML = '';
@@ -443,12 +513,12 @@ function render(){
   poolList.forEach(h => poolZone.appendChild(renderHotelCard(h)));
   new Sortable(poolZone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
 
-  renderSummary();
+  updateHeaderTotal();
 }
 
 function onDrop(){
   // 依照每個 zone 目前的卡片順序與所屬 data-date 更新 assignedDate
-  const zones = document.querySelectorAll('.drop-zone');
+  const zones = document.querySelectorAll('.hotel-drop, #poolZone');
   const newHotels = [...hotels];
   zones.forEach(zone => {
     const date = zone.dataset.date || null;
@@ -494,25 +564,33 @@ function renderHotelCard(h){
   return el;
 }
 
-function renderSummary(){
-  const grid = document.getElementById('summary-grid');
-  grid.innerHTML = '';
+function updateHeaderTotal(){
   let count = 0, total = 0;
-  DATES.forEach((d, idx) => {
+  DATES.forEach(d => {
     const chosen = hotels.find(h => h.assignedDate === d && h.chosen);
-    const item = document.createElement('div');
-    if(chosen){
-      count++; total += adjustedPrice(chosen);
-      item.className = 'sum-item';
-      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div class="sum-hotel">${escapeHtml(chosen.name)}</div><div class="sum-price">NT$${adjustedPrice(chosen).toLocaleString()}</div>`;
-    } else {
-      item.className = 'sum-item empty';
-      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div>尚未選定</div>`;
-    }
-    grid.appendChild(item);
+    if(chosen){ count++; total += adjustedPrice(chosen); }
   });
   document.getElementById('chosen-count').textContent = count;
   document.getElementById('total-price').textContent = total.toLocaleString();
+}
+
+function renderPlanCard(p){
+  const el = document.createElement('div');
+  el.className = 'plan-card';
+  el.dataset.id = p.id;
+  el.innerHTML = `
+    ${p.time ? `<div class="pc-time">${escapeHtml(p.time)}</div>` : ''}
+    <div class="card-title">${escapeHtml(p.title)}</div>
+    ${p.location ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(p.location)}</span></div>` : ''}
+    ${p.note ? `<div class="card-sub">${escapeHtml(p.note)}</div>` : ''}
+    <div class="card-actions">
+      <button data-edit-plan="${p.id}">編輯</button>
+      <button class="del-btn" data-del-plan="${p.id}">刪除</button>
+    </div>
+  `;
+  el.querySelector('[data-edit-plan]').onclick = () => openPlanDialog(p, p.date);
+  el.querySelector('[data-del-plan]').onclick = () => { if(confirm('確定刪除這筆行程嗎？')) deletePlan(p.id); };
+  return el;
 }
 
 function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -535,15 +613,33 @@ function toggleChosen(id){
   persist();
 }
 
+function upsertPlan(data){
+  const idx = plans.findIndex(p => p.id === data.id);
+  if(idx >= 0) plans[idx] = {...plans[idx], ...data}; else plans.push(data);
+  persist();
+}
+function deletePlan(id){
+  plans = plans.filter(p => p.id !== id);
+  persist();
+}
+function reorderPlans(d, zone){
+  const order = [...zone.children].map(c => c.dataset.id);
+  const sameDay = plans.filter(p => p.date === d).sort((a,b)=> order.indexOf(a.id)-order.indexOf(b.id));
+  const others = plans.filter(p => p.date !== d);
+  plans = [...others, ...sameDay];
+  persist();
+}
+
 /* ============ 7. 對話框 ============ */
 const hotelDialog = document.getElementById('hotelDialog');
 const hotelForm = document.getElementById('hotelForm');
 document.getElementById('hotelCancel').onclick = () => hotelDialog.close();
-document.getElementById('addHotelPool').onclick = () => openHotelDialog(null);
+document.getElementById('addHotelPool').onclick = () => openHotelDialog(null, null);
 
-function openHotelDialog(h){
+function openHotelDialog(h, targetDate){
   document.getElementById('hotelDialogTitle').textContent = h ? '編輯飯店' : '新增飯店';
   document.getElementById('h_id').value = h ? h.id : uid();
+  document.getElementById('h_targetDate').value = h ? (h.assignedDate||'') : (targetDate||'');
   document.getElementById('h_name').value = h ? h.name : '';
   document.getElementById('h_region').value = h ? (h.region||'') : '';
   document.getElementById('h_capacity').value = h ? (h.capacity||'') : '';
@@ -560,9 +656,10 @@ function openHotelDialog(h){
 hotelForm.addEventListener('submit', () => {
   const id = document.getElementById('h_id').value;
   const existing = hotels.find(x => x.id === id);
+  const targetDate = document.getElementById('h_targetDate').value || null;
   const data = {
     id,
-    assignedDate: existing ? existing.assignedDate : null,
+    assignedDate: existing ? existing.assignedDate : targetDate,
     chosen: existing ? existing.chosen : false,
     name: document.getElementById('h_name').value.trim(),
     region: document.getElementById('h_region').value,
@@ -577,6 +674,31 @@ hotelForm.addEventListener('submit', () => {
     cons: document.getElementById('h_cons').value.trim()
   };
   upsertHotel(data);
+});
+
+const planDialog = document.getElementById('planDialog');
+const planForm = document.getElementById('planForm');
+document.getElementById('planCancel').onclick = () => planDialog.close();
+
+function openPlanDialog(p, date){
+  document.getElementById('p_id').value = p ? p.id : uid();
+  document.getElementById('p_date').value = date;
+  document.getElementById('p_time').value = p ? (p.time||'') : '';
+  document.getElementById('p_title').value = p ? p.title : '';
+  document.getElementById('p_location').value = p ? (p.location||'') : '';
+  document.getElementById('p_note').value = p ? (p.note||'') : '';
+  planDialog.showModal();
+}
+planForm.addEventListener('submit', () => {
+  const data = {
+    id: document.getElementById('p_id').value,
+    date: document.getElementById('p_date').value,
+    time: document.getElementById('p_time').value.trim(),
+    title: document.getElementById('p_title').value.trim(),
+    location: document.getElementById('p_location').value,
+    note: document.getElementById('p_note').value.trim()
+  };
+  upsertPlan(data);
 });
 
 /* ============ 8. 總人數／匯率設定 ============ */
