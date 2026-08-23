@@ -199,6 +199,11 @@
       <input id="guestsInput" type="number" min="1" value="8">
       <span>人</span>
     </div>
+    <div class="guests-box">
+      <span>匯率 1日圓=</span>
+      <input id="rateInput" type="number" min="0" step="0.0001" value="0.219">
+      <span>台幣</span>
+    </div>
     <button class="btn btn-gold" id="exportBtn">📋 複製總覽</button>
   </div>
 </header>
@@ -212,7 +217,7 @@
   <div id="summary-grid"></div>
   <div id="grand-total-line">
     <span>已選天數：<b id="chosen-count">0</b> / 9</span>
-    <span>住宿總金額（<span id="total-guests-label">8</span> 人）：$<b id="total-price">0</b></span>
+    <span>住宿總金額（<span id="total-guests-label">8</span> 人）：NT$<b id="total-price">0</b></span>
   </div>
 </div>
 
@@ -274,8 +279,15 @@
       </div>
       <div class="field">
         <label>該人數的總價</label>
-        <input type="number" id="h_price" min="0" placeholder="新台幣">
+        <input type="number" id="h_price" min="0" placeholder="金額">
       </div>
+    </div>
+    <div class="field">
+      <label>幣別</label>
+      <select id="h_currency">
+        <option value="TWD">新台幣 NT$</option>
+        <option value="JPY">日圓 ¥</option>
+      </select>
     </div>
     <div class="field checks">
       <label><input type="checkbox" id="h_breakfast"> 含早餐</label>
@@ -336,16 +348,17 @@ const REGIONS = ["札幌","小樽","函館","登別","洞爺湖","二世谷/新�
 let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
 let totalGuests = 8;
+let jpyRate = 0.219; // 1 日圓 = 多少台幣
 
 /* ============ 3. 本機儲存 fallback ============ */
 const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; totalGuests = d.totalGuests || 8; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, totalGuests})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -359,6 +372,7 @@ function watchFirestore(){
   });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
     if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
+    if(snap.exists && snap.data().jpyRate){ jpyRate = snap.data().jpyRate; }
     render();
   }, err=>{ console.error('讀取 settings 失敗', err); });
   document.getElementById('statusText').textContent = '即時同步中';
@@ -366,7 +380,7 @@ function watchFirestore(){
 function persist(){
   if(isConfigured && db){
     db.collection('trip_data').doc('hotelsFlat').set({list: hotels});
-    db.collection('trip_data').doc('settings').set({totalGuests}, {merge:true});
+    db.collection('trip_data').doc('settings').set({totalGuests, jpyRate}, {merge:true});
   } else {
     saveLocal();
   }
@@ -384,16 +398,22 @@ REGIONS.forEach(r => {
 });
 regionFilterEl.addEventListener('change', () => { regionFilterValue = regionFilterEl.value; render(); });
 
+function priceInTWD(h){
+  const price = Number(h.price)||0;
+  if(h.currency === 'JPY') return price * jpyRate;
+  return price;
+}
 function adjustedPrice(h){
   const cap = Number(h.capacity)||0;
-  const price = Number(h.price)||0;
-  if(!cap) return price;
-  return Math.round(price / cap * totalGuests);
+  const twd = priceInTWD(h);
+  if(!cap) return Math.round(twd);
+  return Math.round(twd / cap * totalGuests);
 }
 
 function render(){
   document.getElementById('guestsInput').value = totalGuests;
   document.getElementById('total-guests-label').textContent = totalGuests;
+  document.getElementById('rateInput').value = jpyRate;
 
   board.innerHTML = '';
   DATES.forEach((d, idx) => {
@@ -454,8 +474,8 @@ function renderHotelCard(h){
     <div class="card-title">${escapeHtml(h.name)}</div>
     ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
     <div class="card-meta">${metaBits.join('')}</div>
-    ${h.price ? `<div class="price-tag">$${adj.toLocaleString()}（${totalGuests}人）
-        <span class="orig">原價 $${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span>
+    ${h.price ? `<div class="price-tag">NT$${adj.toLocaleString()}（${totalGuests}人）
+        <span class="orig">原價 ${h.currency==='JPY'?'¥':'NT$'}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人${h.currency==='JPY' ? `（約合 NT$${Math.round(priceInTWD(h)).toLocaleString()}）` : ''}</span>
       </div>` : ''}
     ${h.pros ? `<div class="card-sub">👍 ${escapeHtml(h.pros)}</div>` : ''}
     ${h.cons ? `<div class="card-sub">👎 ${escapeHtml(h.cons)}</div>` : ''}
@@ -484,7 +504,7 @@ function renderSummary(){
     if(chosen){
       count++; total += adjustedPrice(chosen);
       item.className = 'sum-item';
-      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div class="sum-hotel">${escapeHtml(chosen.name)}</div><div class="sum-price">$${adjustedPrice(chosen).toLocaleString()}</div>`;
+      item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div class="sum-hotel">${escapeHtml(chosen.name)}</div><div class="sum-price">NT$${adjustedPrice(chosen).toLocaleString()}</div>`;
     } else {
       item.className = 'sum-item empty';
       item.innerHTML = `<div class="sum-date">${d}（週${WEEK[idx]}）</div><div>尚未選定</div>`;
@@ -528,6 +548,7 @@ function openHotelDialog(h){
   document.getElementById('h_region').value = h ? (h.region||'') : '';
   document.getElementById('h_capacity').value = h ? (h.capacity||'') : '';
   document.getElementById('h_price').value = h ? (h.price||'') : '';
+  document.getElementById('h_currency').value = h ? (h.currency||'TWD') : 'TWD';
   document.getElementById('h_breakfast').checked = h ? !!h.breakfast : false;
   document.getElementById('h_dinner').checked = h ? !!h.dinner : false;
   document.getElementById('h_link').value = h ? (h.link||'') : '';
@@ -547,6 +568,7 @@ hotelForm.addEventListener('submit', () => {
     region: document.getElementById('h_region').value,
     capacity: document.getElementById('h_capacity').value,
     price: document.getElementById('h_price').value,
+    currency: document.getElementById('h_currency').value,
     breakfast: document.getElementById('h_breakfast').checked,
     dinner: document.getElementById('h_dinner').checked,
     link: document.getElementById('h_link').value.trim(),
@@ -557,10 +579,15 @@ hotelForm.addEventListener('submit', () => {
   upsertHotel(data);
 });
 
-/* ============ 8. 總人數設定 ============ */
+/* ============ 8. 總人數／匯率設定 ============ */
 const guestsInput = document.getElementById('guestsInput');
 guestsInput.addEventListener('change', () => {
   totalGuests = Math.max(1, parseInt(guestsInput.value)||8);
+  persist();
+});
+const rateInput = document.getElementById('rateInput');
+rateInput.addEventListener('change', () => {
+  jpyRate = Math.max(0, parseFloat(rateInput.value)||0.219);
   persist();
 });
 
@@ -569,7 +596,7 @@ document.getElementById('exportBtn').onclick = () => {
   let text = `📌 旅程住宿總覽 (1/23–1/31，${totalGuests}人)\n\n`;
   DATES.forEach((d, idx) => {
     const chosen = hotels.find(h => h.assignedDate === d && h.chosen);
-    text += `${d}（週${WEEK[idx]}）：` + (chosen ? `${chosen.name}（$${adjustedPrice(chosen).toLocaleString()}）` : '尚未選定') + `\n`;
+    text += `${d}（週${WEEK[idx]}）：` + (chosen ? `${chosen.name}（NT$${adjustedPrice(chosen).toLocaleString()}）` : '尚未選定') + `\n`;
   });
   navigator.clipboard.writeText(text).then(()=> alert('已複製到剪貼簿！可以貼到 LINE 群組。'));
 };
