@@ -158,6 +158,8 @@
   .card-sub{font-size:.75rem; color:var(--muted); margin-top:2px;}
   .card-meta{display:flex; gap:6px; flex-wrap:wrap; margin-top:5px;}
   .tag{font-size:.68rem; background:#eef0e6; color:var(--moss-dk); border-radius:4px; padding:2px 6px;}
+  .tag-breakfast{background:#fdedc8; color:#8a5a1e; font-weight:700;}
+  .tag-dinner{background:#e3d6f5; color:#5a3a8a; font-weight:700;}
   .price-tag{font-size:.85rem; font-weight:800; color:var(--clay); margin-top:6px;}
   .price-tag .orig{font-size:.68rem; color:var(--muted); font-weight:500; display:block; margin-top:1px;}
   .card-actions{display:flex; gap:6px; margin-top:7px; flex-wrap:wrap;}
@@ -191,6 +193,8 @@
     box-shadow:0 20px 50px rgba(0,0,0,.25);
   }
   #hotelDialog{width:min(760px,95vw);}
+  #importDialog{width:80vw; max-height:80vh; overflow-y:auto;}
+  #importDialog .modal-inner{width:100% !important; box-sizing:border-box;}
   dialog::backdrop{background:rgba(20,20,15,.45);}
   .modal-inner{padding:20px 22px;}
   .modal-inner h3{margin:0 0 14px; color:var(--moss-dk);}
@@ -399,12 +403,12 @@
 
 <!-- 貼上整週行程視窗 -->
 <dialog id="importDialog">
-  <div class="modal-inner" style="width:min(600px,90vw);">
+  <div class="modal-inner">
     <h3>📥 貼上整週行程</h3>
     <p style="font-size:.78rem; color:var(--muted); margin-top:-8px; margin-bottom:10px;">
       支援格式：每行以「Day 數字」開頭，例如「Day 1（1/23 五）：內容...（住地點）」。系統會依 Day 數字對應到 1/23 起算的日期，並自動抓「住XXX」當作當晚地點。貼上後會直接覆蓋對應日期的行程內容，請確認後再套用。
     </p>
-    <textarea id="importTextarea" style="width:100%; min-height:260px; padding:10px; border:1px solid var(--line); border-radius:8px; font-size:.82rem; font-family:inherit; line-height:1.6;" placeholder="把整段行程文字貼在這裡..."></textarea>
+    <textarea id="importTextarea" style="width:100%; min-height:52vh; padding:10px; border:1px solid var(--line); border-radius:8px; font-size:.85rem; font-family:inherit; line-height:1.7; box-sizing:border-box;" placeholder="把整段行程文字貼在這裡..."></textarea>
     <div id="importPreview" style="margin-top:10px; font-size:.78rem; color:var(--muted);"></div>
     <div class="modal-actions">
       <button type="button" class="cancel-btn" id="importCancelBtn">取消</button>
@@ -684,8 +688,8 @@ function renderHotelCard(h){
   el.dataset.id = h.id;
   const metaBits = [];
   if(h.capacity) metaBits.push(`<span class="tag">👥 原價 ${h.capacity}人份</span>`);
-  if(h.breakfast) metaBits.push(`<span class="tag">🍳 含早餐</span>`);
-  if(h.dinner) metaBits.push(`<span class="tag">🍽️ 含晚餐</span>`);
+  if(h.breakfast) metaBits.push(`<span class="tag tag-breakfast">🍳 含早餐</span>`);
+  if(h.dinner) metaBits.push(`<span class="tag tag-dinner">🍽️ 含晚餐</span>`);
   const adj = adjustedPrice(h);
   const nights = h.checkIn && h.checkOut ? nightsBetween(h.checkIn, h.checkOut) : [];
   el.innerHTML = `
@@ -729,7 +733,7 @@ function openHotelDetail(h){
     ${h.capacity ? `<div class="detail-row"><b>人數：</b>${escapeHtml(String(h.capacity))} 人份報價</div>` : ''}
     ${nightlyRows ? `<div class="detail-row"><b>每晚金額：</b>${nightlyRows}</div>` : ''}
     ${h.price ? `<div class="detail-row"><b>總金額：</b>NT$${adj.toLocaleString()}（換算 ${totalGuests} 人）<br><span class="orig">原價 ${currencySym}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span></div>` : ''}
-    <div class="detail-row">${h.breakfast ? '<span class="tag">🍳 含早餐</span>' : ''} ${h.dinner ? '<span class="tag">🍽️ 含晚餐</span>' : ''}</div>
+    <div class="detail-row">${h.breakfast ? '<span class="tag tag-breakfast">🍳 含早餐</span>' : ''} ${h.dinner ? '<span class="tag tag-dinner">🍽️ 含晚餐</span>' : ''}</div>
     ${h.pros ? `<div class="detail-row"><b>👍 優點：</b>${escapeHtml(h.pros)}</div>` : ''}
     ${h.cons ? `<div class="detail-row"><b>👎 缺點：</b>${escapeHtml(h.cons)}</div>` : ''}
     <div class="detail-links">
