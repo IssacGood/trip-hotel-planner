@@ -113,7 +113,7 @@
     border-radius:6px; padding:5px 10px; cursor:pointer; font-size:.75rem; font-weight:700;
   }
   .drop-zone{min-height:50px; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;}
-  #pool-panel .drop-zone, .plan-zone{display:block;}
+  #pool-panel .drop-zone{display:block;}
   .hotel-card{flex:0 0 220px;}
   .drop-zone.empty-hint::before{
     content:"拖曳飯店卡片到這裡";
@@ -121,14 +121,19 @@
     border:1.5px dashed var(--line); border-radius:8px; padding:16px 4px; margin-top:2px;
     width:100%;
   }
-  .plan-zone.empty-hint::before{ content:"點「＋新增行程」開始安排這天的行程"; }
 
-  .hotel-card, .plan-card{
+  .itinerary-box{
+    width:100%; min-height:120px; resize:vertical; border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; font-family:inherit; font-size:.85rem; background:#fffdf8; line-height:1.6;
+  }
+  .itinerary-box:focus{outline:none; border-color:var(--moss);}
+
+  .hotel-card{
     background:#fffdf8; border:1px solid var(--line); border-radius:8px;
     padding:9px 10px; margin-bottom:8px; cursor:grab; position:relative;
     transition:box-shadow .15s, border-color .15s;
   }
-  .hotel-card:hover, .plan-card:hover{box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .hotel-card:hover{box-shadow:0 2px 6px rgba(0,0,0,.08);}
   .hotel-card.chosen{border-color:var(--moss); background:var(--chosen);}
   .hotel-card.chosen::before{
     content:"✅ 已選定"; font-size:.68rem; color:var(--moss-dk); font-weight:700;
@@ -148,6 +153,20 @@
   .card-actions .del-btn{background:#f3e2dd; color:var(--clay);}
   .card-actions a{font-size:.68rem; color:#2f6fb0; align-self:center;}
   .pc-time{font-size:.68rem; color:var(--moss-dk); font-weight:700;}
+  .map-quick{
+    position:absolute; top:7px; right:8px; text-decoration:none; font-size:.95rem;
+    background:#eef3f8; border-radius:6px; padding:2px 6px; line-height:1.4;
+  }
+  .card-hint{font-size:.64rem; color:#c7c0a9; text-align:right; margin-top:5px;}
+  .detail-row{font-size:.85rem; margin-bottom:9px; line-height:1.5;}
+  .detail-row b{color:var(--moss-dk);}
+  .detail-row .orig{font-size:.72rem; color:var(--muted);}
+  .detail-links{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;}
+  .btn-outline-dark{
+    display:inline-block; border:1px solid var(--moss); color:var(--moss-dk); background:#fff;
+    border-radius:6px; padding:7px 12px; font-size:.8rem; font-weight:600; text-decoration:none;
+  }
+  #detailDialog{width:min(460px,92vw);}
 
   .sortable-ghost{opacity:.35;}
   .sortable-drag{cursor:grabbing;}
@@ -256,7 +275,11 @@
       <input type="text" id="h_name" required placeholder="例如：花蓮理想大地">
     </div>
     <div class="field">
-      <label>地區</label>
+      <label>地址（可直接貼 Google 地圖上複製的地址）</label>
+      <input type="text" id="h_address" placeholder="例如：33 Toyakoonsen, Toyako, Abuta District, Hokkaido">
+    </div>
+    <div class="field">
+      <label>地區（會依地址自動判斷，也可手動修改）</label>
       <select id="h_region">
         <option value="">— 選擇地區 —</option>
         <option value="札幌">札幌</option>
@@ -274,6 +297,10 @@
         <option value="帶廣">帶廣</option>
         <option value="其他">其他</option>
       </select>
+    </div>
+    <div class="field">
+      <label>Google 地圖連結</label>
+      <input type="url" id="h_mapLink" placeholder="https://maps.app.goo.gl/...">
     </div>
     <div class="row2">
       <div class="field">
@@ -322,48 +349,19 @@
 </dialog>
 
 <!-- 行程編輯視窗 -->
-<dialog id="planDialog">
-  <form class="modal-inner" method="dialog" id="planForm">
-    <h3>新增當天行程</h3>
-    <input type="hidden" id="p_id">
-    <input type="hidden" id="p_date">
-    <div class="field">
-      <label>時間（選填）</label>
-      <input type="text" id="p_time" placeholder="例如：09:00 或 上午">
+
+<!-- 飯店詳情（唯讀）視窗 -->
+<dialog id="detailDialog">
+  <div class="modal-inner">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+      <h3 id="detailTitle" style="margin:0;">飯店詳情</h3>
+      <div style="display:flex; gap:6px; flex-shrink:0;">
+        <button type="button" class="btn btn-gold" id="detailEditBtn">✏️ 編輯</button>
+        <button type="button" class="btn" style="background:#eee; color:#555;" id="detailCloseBtn">關閉</button>
+      </div>
     </div>
-    <div class="field">
-      <label>地點／活動</label>
-      <input type="text" id="p_title" required placeholder="例如：小樽運河">
-    </div>
-    <div class="field">
-      <label>所在地區</label>
-      <select id="p_location">
-        <option value="">— 選擇地區 —</option>
-        <option value="札幌">札幌</option>
-        <option value="小樽">小樽</option>
-        <option value="函館">函館</option>
-        <option value="登別">登別</option>
-        <option value="洞爺湖">洞爺湖</option>
-        <option value="二世谷/新雪谷">二世谷/新雪谷</option>
-        <option value="旭川">旭川</option>
-        <option value="富良野/美瑛">富良野/美瑛</option>
-        <option value="層雲峽">層雲峽</option>
-        <option value="知床">知床</option>
-        <option value="網走">網走</option>
-        <option value="釧路">釧路</option>
-        <option value="帶廣">帶廣</option>
-        <option value="其他">其他</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>備註</label>
-      <textarea id="p_note" placeholder="交通方式、注意事項等"></textarea>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="cancel-btn" id="planCancel">取消</button>
-      <button type="submit" class="save-btn">儲存</button>
-    </div>
-  </form>
+    <div id="detailBody" style="margin-top:14px;"></div>
+  </div>
 </dialog>
 
 <script>
@@ -395,7 +393,7 @@ const WEEK = ["六","日","一","二","三","四","五","六","日"]; // 對應 
 const REGIONS = ["札幌","小樽","函館","登別","洞爺湖","二世谷/新雪谷","旭川","富良野/美瑛","層雲峽","知床","網走","釧路","帶廣","其他"];
 let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
-let plans = [];        // 扁平陣列: {id,date,time,title,location,note}
+let itinerary = {};    // { "1/23": "文字內容", ... } 每天一段共用純文字
 let totalGuests = 8;
 let jpyRate = 0.219; // 1 日圓 = 多少台幣
 
@@ -404,10 +402,10 @@ const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; plans = d.plans || []; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, plans, totalGuests, jpyRate})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -419,10 +417,10 @@ function watchFirestore(){
     document.getElementById('statusText').textContent = '同步失敗（請檢查 Firestore 規則）';
     document.getElementById('statusDot').style.background = '#c0392b';
   });
-  db.collection('trip_data').doc('plansFlat').onSnapshot(snap=>{
-    if(snap.exists){ plans = snap.data().list || []; }
-    render();
-  }, err=>{ console.error('讀取 plansFlat 失敗', err); });
+  db.collection('trip_data').doc('itineraryText').onSnapshot(snap=>{
+    if(snap.exists){ itinerary = snap.data().byDate || {}; }
+    renderItineraryTextOnly();
+  }, err=>{ console.error('讀取 itineraryText 失敗', err); });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
     if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
     if(snap.exists && snap.data().jpyRate){ jpyRate = snap.data().jpyRate; }
@@ -433,12 +431,33 @@ function watchFirestore(){
 function persist(){
   if(isConfigured && db){
     db.collection('trip_data').doc('hotelsFlat').set({list: hotels});
-    db.collection('trip_data').doc('plansFlat').set({list: plans});
     db.collection('trip_data').doc('settings').set({totalGuests, jpyRate}, {merge:true});
   } else {
     saveLocal();
   }
   render();
+}
+
+let itineraryDebounce = null;
+function persistItinerary(date, text){
+  itinerary[date] = text;
+  if(itineraryDebounce) clearTimeout(itineraryDebounce);
+  itineraryDebounce = setTimeout(() => {
+    if(isConfigured && db){
+      db.collection('trip_data').doc('itineraryText').set({byDate: itinerary});
+    } else {
+      saveLocal();
+    }
+  }, 500);
+}
+function renderItineraryTextOnly(){
+  document.querySelectorAll('.itinerary-box').forEach(ta => {
+    const d = ta.dataset.date;
+    // 只有在使用者目前沒有focus在這個欄位時才更新內容，避免打斷輸入
+    if(document.activeElement !== ta && itinerary[d] !== undefined && ta.value !== itinerary[d]){
+      ta.value = itinerary[d] || '';
+    }
+  });
 }
 
 /* ============ 5. Render ============ */
@@ -483,8 +502,8 @@ function render(){
           <div class="drop-zone hotel-drop" data-date="${d}"></div>
         </div>
         <div class="day-section">
-          <h3>📍 當天行程 <button class="add-mini" data-add-plan="${d}">＋新增行程</button></h3>
-          <div class="drop-zone plan-zone" data-date="${d}"></div>
+          <h3>📍 當天行程</h3>
+          <textarea class="itinerary-box" data-date="${d}" placeholder="直接輸入這天的行程、地點、交通方式...任何人都可以編輯">${escapeHtml(itinerary[d]||'')}</textarea>
         </div>
       </div>
     `;
@@ -496,14 +515,10 @@ function render(){
     list.forEach(h => hzone.appendChild(renderHotelCard(h)));
     new Sortable(hzone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
 
-    const pzone = col.querySelector('.plan-zone');
-    const plist = plans.filter(p => p.date === d);
-    if(plist.length===0) pzone.classList.add('empty-hint');
-    plist.forEach(p => pzone.appendChild(renderPlanCard(p)));
-    new Sortable(pzone, { group:'plans-'+d, animation:150, onEnd: ()=>reorderPlans(d, pzone) });
+    const itineraryBox = col.querySelector('.itinerary-box');
+    itineraryBox.addEventListener('input', () => persistItinerary(d, itineraryBox.value));
 
     col.querySelector('[data-add-hotel]').onclick = () => openHotelDialog(null, d);
-    col.querySelector('[data-add-plan]').onclick = () => openPlanDialog(null, d);
   });
 
   poolZone.innerHTML = '';
@@ -541,27 +556,47 @@ function renderHotelCard(h){
   if(h.dinner) metaBits.push(`<span class="tag">🍽️ 含晚餐</span>`);
   const adj = adjustedPrice(h);
   el.innerHTML = `
+    ${h.mapLink ? `<a class="map-quick" href="${escapeAttr(h.mapLink)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">🗺️</a>` : ''}
     <div class="card-title">${escapeHtml(h.name)}</div>
     ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
     <div class="card-meta">${metaBits.join('')}</div>
     ${h.price ? `<div class="price-tag">NT$${adj.toLocaleString()}（${totalGuests}人）
         <span class="orig">原價 ${h.currency==='JPY'?'¥':'NT$'}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人${h.currency==='JPY' ? `（約合 NT$${Math.round(priceInTWD(h)).toLocaleString()}）` : ''}</span>
       </div>` : ''}
-    ${h.pros ? `<div class="card-sub">👍 ${escapeHtml(h.pros)}</div>` : ''}
-    ${h.cons ? `<div class="card-sub">👎 ${escapeHtml(h.cons)}</div>` : ''}
     <div class="card-actions">
-      ${h.link ? `<a href="${escapeAttr(h.link)}" target="_blank" rel="noopener">介紹</a>` : ''}
-      ${h.bookingLink ? `<a href="${escapeAttr(h.bookingLink)}" target="_blank" rel="noopener">訂房</a>` : ''}
       ${h.assignedDate ? `<button class="pick-btn" data-pick="${h.id}">${h.chosen ? '取消選定' : '選這間'}</button>` : ''}
-      <button data-edit-hotel="${h.id}">編輯</button>
       <button class="del-btn" data-del-hotel="${h.id}">刪除</button>
     </div>
+    <div class="card-hint">雙擊查看詳情</div>
   `;
-  el.querySelector('[data-edit-hotel]').onclick = () => openHotelDialog(h);
-  el.querySelector('[data-del-hotel]').onclick = () => { if(confirm(`確定刪除「${h.name}」嗎？`)) deleteHotel(h.id); };
+  el.querySelector('[data-del-hotel]').onclick = (e) => { e.stopPropagation(); if(confirm(`確定刪除「${h.name}」嗎？`)) deleteHotel(h.id); };
   const pickBtn = el.querySelector('[data-pick]');
-  if(pickBtn) pickBtn.onclick = () => toggleChosen(h.id);
+  if(pickBtn) pickBtn.onclick = (e) => { e.stopPropagation(); toggleChosen(h.id); };
+  const mapQuick = el.querySelector('.map-quick');
+  if(mapQuick) mapQuick.onclick = (e) => e.stopPropagation();
+  el.addEventListener('dblclick', () => openHotelDetail(h));
   return el;
+}
+
+function openHotelDetail(h){
+  const adj = adjustedPrice(h);
+  document.getElementById('detailTitle').textContent = h.name;
+  document.getElementById('detailBody').innerHTML = `
+    ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
+    ${h.address ? `<div class="detail-row"><b>地址：</b>${escapeHtml(h.address)}</div>` : ''}
+    ${h.capacity ? `<div class="detail-row"><b>人數：</b>${escapeHtml(String(h.capacity))} 人份報價</div>` : ''}
+    ${h.price ? `<div class="detail-row"><b>金額：</b>NT$${adj.toLocaleString()}（換算 ${totalGuests} 人）<br><span class="orig">原價 ${h.currency==='JPY'?'¥':'NT$'}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span></div>` : ''}
+    <div class="detail-row">${h.breakfast ? '<span class="tag">🍳 含早餐</span>' : ''} ${h.dinner ? '<span class="tag">🍽️ 含晚餐</span>' : ''}</div>
+    ${h.pros ? `<div class="detail-row"><b>👍 優點：</b>${escapeHtml(h.pros)}</div>` : ''}
+    ${h.cons ? `<div class="detail-row"><b>👎 缺點：</b>${escapeHtml(h.cons)}</div>` : ''}
+    <div class="detail-links">
+      ${h.link ? `<a href="${escapeAttr(h.link)}" target="_blank" rel="noopener" class="btn btn-outline-dark">🔗 飯店介紹</a>` : ''}
+      ${h.bookingLink ? `<a href="${escapeAttr(h.bookingLink)}" target="_blank" rel="noopener" class="btn btn-outline-dark">🛏️ 訂房連結</a>` : ''}
+      ${h.mapLink ? `<a href="${escapeAttr(h.mapLink)}" target="_blank" rel="noopener" class="btn btn-outline-dark">🗺️ Google 地圖</a>` : ''}
+    </div>
+  `;
+  document.getElementById('detailEditBtn').onclick = () => { detailDialog.close(); openHotelDialog(h); };
+  detailDialog.showModal();
 }
 
 function updateHeaderTotal(){
@@ -572,25 +607,6 @@ function updateHeaderTotal(){
   });
   document.getElementById('chosen-count').textContent = count;
   document.getElementById('total-price').textContent = total.toLocaleString();
-}
-
-function renderPlanCard(p){
-  const el = document.createElement('div');
-  el.className = 'plan-card';
-  el.dataset.id = p.id;
-  el.innerHTML = `
-    ${p.time ? `<div class="pc-time">${escapeHtml(p.time)}</div>` : ''}
-    <div class="card-title">${escapeHtml(p.title)}</div>
-    ${p.location ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(p.location)}</span></div>` : ''}
-    ${p.note ? `<div class="card-sub">${escapeHtml(p.note)}</div>` : ''}
-    <div class="card-actions">
-      <button data-edit-plan="${p.id}">編輯</button>
-      <button class="del-btn" data-del-plan="${p.id}">刪除</button>
-    </div>
-  `;
-  el.querySelector('[data-edit-plan]').onclick = () => openPlanDialog(p, p.date);
-  el.querySelector('[data-del-plan]').onclick = () => { if(confirm('確定刪除這筆行程嗎？')) deletePlan(p.id); };
-  return el;
 }
 
 function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -613,26 +629,11 @@ function toggleChosen(id){
   persist();
 }
 
-function upsertPlan(data){
-  const idx = plans.findIndex(p => p.id === data.id);
-  if(idx >= 0) plans[idx] = {...plans[idx], ...data}; else plans.push(data);
-  persist();
-}
-function deletePlan(id){
-  plans = plans.filter(p => p.id !== id);
-  persist();
-}
-function reorderPlans(d, zone){
-  const order = [...zone.children].map(c => c.dataset.id);
-  const sameDay = plans.filter(p => p.date === d).sort((a,b)=> order.indexOf(a.id)-order.indexOf(b.id));
-  const others = plans.filter(p => p.date !== d);
-  plans = [...others, ...sameDay];
-  persist();
-}
-
 /* ============ 7. 對話框 ============ */
 const hotelDialog = document.getElementById('hotelDialog');
 const hotelForm = document.getElementById('hotelForm');
+const detailDialog = document.getElementById('detailDialog');
+document.getElementById('detailCloseBtn').onclick = () => detailDialog.close();
 document.getElementById('hotelCancel').onclick = () => hotelDialog.close();
 document.getElementById('addHotelPool').onclick = () => openHotelDialog(null, null);
 
@@ -641,7 +642,9 @@ function openHotelDialog(h, targetDate){
   document.getElementById('h_id').value = h ? h.id : uid();
   document.getElementById('h_targetDate').value = h ? (h.assignedDate||'') : (targetDate||'');
   document.getElementById('h_name').value = h ? h.name : '';
+  document.getElementById('h_address').value = h ? (h.address||'') : '';
   document.getElementById('h_region').value = h ? (h.region||'') : '';
+  document.getElementById('h_mapLink').value = h ? (h.mapLink||'') : '';
   document.getElementById('h_capacity').value = h ? (h.capacity||'') : '';
   document.getElementById('h_price').value = h ? (h.price||'') : '';
   document.getElementById('h_currency').value = h ? (h.currency||'TWD') : 'TWD';
@@ -653,6 +656,35 @@ function openHotelDialog(h, targetDate){
   document.getElementById('h_cons').value = h ? (h.cons||'') : '';
   hotelDialog.showModal();
 }
+
+// 依地址關鍵字自動猜測北海道地區（英文/日文/中文都比對）
+const REGION_KEYWORDS = {
+  "札幌": ["sapporo","札幌"],
+  "小樽": ["otaru","小樽"],
+  "函館": ["hakodate","函館"],
+  "登別": ["noboribetsu","登別"],
+  "洞爺湖": ["toyako","toya lake","toya-ko","洞爺"],
+  "二世谷/新雪谷": ["niseko","二世谷","新雪谷"],
+  "旭川": ["asahikawa","旭川"],
+  "富良野/美瑛": ["furano","biei","富良野","美瑛"],
+  "層雲峽": ["sounkyo","層雲峽"],
+  "知床": ["shiretoko","知床"],
+  "網走": ["abashiri","網走"],
+  "釧路": ["kushiro","釧路"],
+  "帶廣": ["obihiro","帶廣"]
+};
+function guessRegion(address){
+  const a = (address||"").toLowerCase();
+  for(const [region, keys] of Object.entries(REGION_KEYWORDS)){
+    if(keys.some(k => a.includes(k.toLowerCase()))) return region;
+  }
+  return "";
+}
+document.getElementById('h_address').addEventListener('input', () => {
+  const guessed = guessRegion(document.getElementById('h_address').value);
+  if(guessed) document.getElementById('h_region').value = guessed;
+});
+
 hotelForm.addEventListener('submit', () => {
   const id = document.getElementById('h_id').value;
   const existing = hotels.find(x => x.id === id);
@@ -662,7 +694,9 @@ hotelForm.addEventListener('submit', () => {
     assignedDate: existing ? existing.assignedDate : targetDate,
     chosen: existing ? existing.chosen : false,
     name: document.getElementById('h_name').value.trim(),
+    address: document.getElementById('h_address').value.trim(),
     region: document.getElementById('h_region').value,
+    mapLink: document.getElementById('h_mapLink').value.trim(),
     capacity: document.getElementById('h_capacity').value,
     price: document.getElementById('h_price').value,
     currency: document.getElementById('h_currency').value,
@@ -674,31 +708,6 @@ hotelForm.addEventListener('submit', () => {
     cons: document.getElementById('h_cons').value.trim()
   };
   upsertHotel(data);
-});
-
-const planDialog = document.getElementById('planDialog');
-const planForm = document.getElementById('planForm');
-document.getElementById('planCancel').onclick = () => planDialog.close();
-
-function openPlanDialog(p, date){
-  document.getElementById('p_id').value = p ? p.id : uid();
-  document.getElementById('p_date').value = date;
-  document.getElementById('p_time').value = p ? (p.time||'') : '';
-  document.getElementById('p_title').value = p ? p.title : '';
-  document.getElementById('p_location').value = p ? (p.location||'') : '';
-  document.getElementById('p_note').value = p ? (p.note||'') : '';
-  planDialog.showModal();
-}
-planForm.addEventListener('submit', () => {
-  const data = {
-    id: document.getElementById('p_id').value,
-    date: document.getElementById('p_date').value,
-    time: document.getElementById('p_time').value.trim(),
-    title: document.getElementById('p_title').value.trim(),
-    location: document.getElementById('p_location').value,
-    note: document.getElementById('p_note').value.trim()
-  };
-  upsertPlan(data);
 });
 
 /* ============ 8. 總人數／匯率設定 ============ */
