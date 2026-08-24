@@ -103,7 +103,7 @@
   .day-section{flex:1; padding:10px 14px; border-right:1px solid var(--line); min-width:0;}
   .day-section:last-child{border-right:none;}
 
-  .col-section{padding:8px 10px; overflow-y:auto; flex:1;}
+  .col-section{padding:8px 10px; overflow-y:auto; overflow-x:hidden; flex:1;}
   .col-section h3, .day-section h3{
     font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
     margin:0 2px 8px; display:flex; justify-content:space-between; align-items:center;
@@ -304,12 +304,23 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label>此價格是幾人份？</label>
-        <input type="number" id="h_capacity" min="1" placeholder="例如：2" required>
+        <label>入住日期</label>
+        <select id="h_checkIn"></select>
       </div>
       <div class="field">
-        <label>該人數的總價</label>
-        <input type="number" id="h_price" min="0" placeholder="金額">
+        <label>退房日期</label>
+        <select id="h_checkOut"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>此價格是幾人份？</label>
+      <input type="number" id="h_capacity" min="1" placeholder="例如：2" required>
+    </div>
+    <div class="field">
+      <label>每晚金額（每天可能不同，會自動加總）</label>
+      <div id="nightlyPricesContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div style="text-align:right; font-size:.8rem; color:var(--clay); font-weight:700; margin-top:6px;">
+        總計：<span id="nightlyTotalLabel">0</span>
       </div>
     </div>
     <div class="field">
@@ -555,9 +566,11 @@ function renderHotelCard(h){
   if(h.breakfast) metaBits.push(`<span class="tag">🍳 含早餐</span>`);
   if(h.dinner) metaBits.push(`<span class="tag">🍽️ 含晚餐</span>`);
   const adj = adjustedPrice(h);
+  const nights = h.checkIn && h.checkOut ? nightsBetween(h.checkIn, h.checkOut) : [];
   el.innerHTML = `
     ${h.mapLink ? `<a class="map-quick" href="${escapeAttr(h.mapLink)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">🗺️</a>` : ''}
     <div class="card-title">${escapeHtml(h.name)}</div>
+    ${nights.length>0 ? `<div class="card-meta"><span class="tag" style="background:#fbeedc; color:#8a5a1e;">🛏️ ${h.checkIn}→${h.checkOut}（住${nights.length}晚）</span></div>` : ''}
     ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
     <div class="card-meta">${metaBits.join('')}</div>
     ${h.price ? `<div class="price-tag">NT$${adj.toLocaleString()}（${totalGuests}人）
@@ -580,12 +593,21 @@ function renderHotelCard(h){
 
 function openHotelDetail(h){
   const adj = adjustedPrice(h);
+  const nights = h.checkIn && h.checkOut ? nightsBetween(h.checkIn, h.checkOut) : [];
+  const currencySym = h.currency==='JPY' ? '¥' : 'NT$';
+  const nightlyRows = nights.map(d => `
+    <div style="display:flex; justify-content:space-between; font-size:.8rem; padding:3px 0; border-bottom:1px dashed var(--line);">
+      <span>${d} 晚</span><span>${currencySym}${Number((h.nightlyPrices||{})[d]||0).toLocaleString()}</span>
+    </div>
+  `).join('');
   document.getElementById('detailTitle').textContent = h.name;
   document.getElementById('detailBody').innerHTML = `
+    ${nights.length>0 ? `<div class="card-meta"><span class="tag" style="background:#fbeedc; color:#8a5a1e;">🛏️ ${h.checkIn}→${h.checkOut}（住${nights.length}晚）</span></div>` : ''}
     ${h.region ? `<div class="card-meta"><span class="tag" style="background:#e3ecf5; color:#2b4d73;">📍 ${escapeHtml(h.region)}</span></div>` : ''}
     ${h.address ? `<div class="detail-row"><b>地址：</b>${escapeHtml(h.address)}</div>` : ''}
     ${h.capacity ? `<div class="detail-row"><b>人數：</b>${escapeHtml(String(h.capacity))} 人份報價</div>` : ''}
-    ${h.price ? `<div class="detail-row"><b>金額：</b>NT$${adj.toLocaleString()}（換算 ${totalGuests} 人）<br><span class="orig">原價 ${h.currency==='JPY'?'¥':'NT$'}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span></div>` : ''}
+    ${nightlyRows ? `<div class="detail-row"><b>每晚金額：</b>${nightlyRows}</div>` : ''}
+    ${h.price ? `<div class="detail-row"><b>總金額：</b>NT$${adj.toLocaleString()}（換算 ${totalGuests} 人）<br><span class="orig">原價 ${currencySym}${Number(h.price).toLocaleString()} / ${h.capacity||'?'}人</span></div>` : ''}
     <div class="detail-row">${h.breakfast ? '<span class="tag">🍳 含早餐</span>' : ''} ${h.dinner ? '<span class="tag">🍽️ 含晚餐</span>' : ''}</div>
     ${h.pros ? `<div class="detail-row"><b>👍 優點：</b>${escapeHtml(h.pros)}</div>` : ''}
     ${h.cons ? `<div class="detail-row"><b>👎 缺點：</b>${escapeHtml(h.cons)}</div>` : ''}
@@ -637,6 +659,48 @@ document.getElementById('detailCloseBtn').onclick = () => detailDialog.close();
 document.getElementById('hotelCancel').onclick = () => hotelDialog.close();
 document.getElementById('addHotelPool').onclick = () => openHotelDialog(null, null);
 
+function nightsBetween(checkIn, checkOut){
+  const i1 = DATES.indexOf(checkIn), i2 = DATES.indexOf(checkOut);
+  if(i1<0 || i2<0 || i2<=i1) return [];
+  return DATES.slice(i1, i2);
+}
+function currentNightlyValues(){
+  const vals = {};
+  document.querySelectorAll('.nightly-input').forEach(inp => { vals[inp.dataset.date] = inp.value; });
+  return vals;
+}
+function updateNightlyTotal(){
+  let total = 0;
+  document.querySelectorAll('.nightly-input').forEach(inp => total += Number(inp.value)||0);
+  document.getElementById('nightlyTotalLabel').textContent = total.toLocaleString();
+}
+function renderNightlyInputs(existingPrices){
+  const checkIn = document.getElementById('h_checkIn').value;
+  const checkOut = document.getElementById('h_checkOut').value;
+  const nights = nightsBetween(checkIn, checkOut);
+  const container = document.getElementById('nightlyPricesContainer');
+  if(nights.length === 0){
+    container.innerHTML = '<div style="font-size:.78rem;color:var(--muted);">退房日期需晚於入住日期</div>';
+    updateNightlyTotal();
+    return;
+  }
+  container.innerHTML = nights.map(d => `
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="width:66px; font-size:.78rem; color:var(--muted); flex-shrink:0;">${d} 晚</span>
+      <input type="number" min="0" class="nightly-input" data-date="${d}" value="${existingPrices && existingPrices[d] !== undefined ? existingPrices[d] : ''}" placeholder="金額" style="flex:1; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:.82rem;">
+    </div>
+  `).join('');
+  container.querySelectorAll('.nightly-input').forEach(inp => inp.addEventListener('input', updateNightlyTotal));
+  updateNightlyTotal();
+}
+const h_checkInEl = document.getElementById('h_checkIn');
+const h_checkOutEl = document.getElementById('h_checkOut');
+[h_checkInEl, h_checkOutEl].forEach(sel => {
+  DATES.forEach(d => { const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
+});
+h_checkInEl.addEventListener('change', () => renderNightlyInputs(currentNightlyValues()));
+h_checkOutEl.addEventListener('change', () => renderNightlyInputs(currentNightlyValues()));
+
 function openHotelDialog(h, targetDate){
   document.getElementById('hotelDialogTitle').textContent = h ? '編輯飯店' : '新增飯店';
   document.getElementById('h_id').value = h ? h.id : uid();
@@ -646,7 +710,6 @@ function openHotelDialog(h, targetDate){
   document.getElementById('h_region').value = h ? (h.region||'') : '';
   document.getElementById('h_mapLink').value = h ? (h.mapLink||'') : '';
   document.getElementById('h_capacity').value = h ? (h.capacity||'') : '';
-  document.getElementById('h_price').value = h ? (h.price||'') : '';
   document.getElementById('h_currency').value = h ? (h.currency||'TWD') : 'TWD';
   document.getElementById('h_breakfast').checked = h ? !!h.breakfast : false;
   document.getElementById('h_dinner').checked = h ? !!h.dinner : false;
@@ -654,6 +717,14 @@ function openHotelDialog(h, targetDate){
   document.getElementById('h_bookingLink').value = h ? (h.bookingLink||'') : '';
   document.getElementById('h_pros').value = h ? (h.pros||'') : '';
   document.getElementById('h_cons').value = h ? (h.cons||'') : '';
+
+  const defaultCheckIn = h ? (h.checkIn || targetDate || DATES[0]) : (targetDate || DATES[0]);
+  const inIdx = DATES.indexOf(defaultCheckIn);
+  const defaultCheckOut = h ? (h.checkOut || DATES[Math.min(inIdx+1, DATES.length-1)]) : DATES[Math.min(inIdx+1, DATES.length-1)];
+  h_checkInEl.value = defaultCheckIn;
+  h_checkOutEl.value = defaultCheckOut;
+  renderNightlyInputs(h ? (h.nightlyPrices||{}) : {});
+
   hotelDialog.showModal();
 }
 
@@ -689,16 +760,28 @@ hotelForm.addEventListener('submit', () => {
   const id = document.getElementById('h_id').value;
   const existing = hotels.find(x => x.id === id);
   const targetDate = document.getElementById('h_targetDate').value || null;
+  const checkIn = h_checkInEl.value;
+  const checkOut = h_checkOutEl.value;
+  const nightlyPrices = {};
+  let priceSum = 0;
+  document.querySelectorAll('.nightly-input').forEach(inp => {
+    const v = Number(inp.value)||0;
+    nightlyPrices[inp.dataset.date] = v;
+    priceSum += v;
+  });
   const data = {
     id,
-    assignedDate: existing ? existing.assignedDate : targetDate,
+    assignedDate: existing ? existing.assignedDate : (targetDate || checkIn),
     chosen: existing ? existing.chosen : false,
     name: document.getElementById('h_name').value.trim(),
     address: document.getElementById('h_address').value.trim(),
     region: document.getElementById('h_region').value,
     mapLink: document.getElementById('h_mapLink').value.trim(),
+    checkIn,
+    checkOut,
+    nightlyPrices,
     capacity: document.getElementById('h_capacity').value,
-    price: document.getElementById('h_price').value,
+    price: priceSum,
     currency: document.getElementById('h_currency').value,
     breakfast: document.getElementById('h_breakfast').checked,
     dinner: document.getElementById('h_dinner').checked,
