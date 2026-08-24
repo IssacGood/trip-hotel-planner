@@ -175,6 +175,7 @@
     border:none; border-radius:12px; padding:0; width:min(440px,92vw);
     box-shadow:0 20px 50px rgba(0,0,0,.25);
   }
+  #hotelDialog{width:min(760px,95vw);}
   dialog::backdrop{background:rgba(20,20,15,.45);}
   .modal-inner{padding:20px 22px;}
   .modal-inner h3{margin:0 0 14px; color:var(--moss-dk);}
@@ -193,6 +194,19 @@
   .modal-actions button{padding:8px 16px; border-radius:6px; border:none; font-weight:600; cursor:pointer; font-size:.85rem;}
   .cancel-btn{background:#eee; color:#555;}
   .save-btn{background:var(--moss); color:#fff;}
+
+  #nightlyPricesContainer{
+    display:grid; grid-template-columns:repeat(9, 1fr); gap:6px;
+  }
+  .nightly-cell{display:flex; flex-direction:column; gap:4px; align-items:center;}
+  .nightly-cell .nd-label{font-size:.7rem; color:var(--moss-dk); font-weight:700; white-space:nowrap;}
+  .nightly-cell input{
+    width:100%; padding:6px 3px; border:1px solid var(--line); border-radius:6px; font-size:.78rem;
+    text-align:center; background:#fdfcf8;
+  }
+  @media (max-width:700px){
+    #nightlyPricesContainer{grid-template-columns:repeat(3, 1fr);}
+  }
 
   #config-banner{
     margin:14px 18px 0; background:#fff4e6; border:1px solid #e6c78a; border-radius:8px;
@@ -302,25 +316,15 @@
       <label>Google 地圖連結</label>
       <input type="url" id="h_mapLink" placeholder="https://maps.app.goo.gl/...">
     </div>
-    <div class="row2">
-      <div class="field">
-        <label>入住日期</label>
-        <select id="h_checkIn"></select>
-      </div>
-      <div class="field">
-        <label>退房日期</label>
-        <select id="h_checkOut"></select>
-      </div>
-    </div>
     <div class="field">
       <label>此價格是幾人份？</label>
       <input type="number" id="h_capacity" min="1" placeholder="例如：2" required>
     </div>
     <div class="field">
-      <label>每晚金額（每天可能不同，會自動加總）</label>
-      <div id="nightlyPricesContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <label>每晚金額（哪幾天有住就填哪幾天，會自動加總）</label>
+      <div id="nightlyPricesContainer"></div>
       <div style="text-align:right; font-size:.8rem; color:var(--clay); font-weight:700; margin-top:6px;">
-        總計：<span id="nightlyTotalLabel">0</span>
+        總計：$<span id="nightlyTotalLabel">0</span>
       </div>
     </div>
     <div class="field">
@@ -660,14 +664,10 @@ document.getElementById('hotelCancel').onclick = () => hotelDialog.close();
 document.getElementById('addHotelPool').onclick = () => openHotelDialog(null, null);
 
 function nightsBetween(checkIn, checkOut){
-  const i1 = DATES.indexOf(checkIn), i2 = DATES.indexOf(checkOut);
+  const i1 = DATES.indexOf(checkIn);
+  const i2 = checkOut === '2/1' ? DATES.length : DATES.indexOf(checkOut);
   if(i1<0 || i2<0 || i2<=i1) return [];
   return DATES.slice(i1, i2);
-}
-function currentNightlyValues(){
-  const vals = {};
-  document.querySelectorAll('.nightly-input').forEach(inp => { vals[inp.dataset.date] = inp.value; });
-  return vals;
 }
 function updateNightlyTotal(){
   let total = 0;
@@ -675,31 +675,16 @@ function updateNightlyTotal(){
   document.getElementById('nightlyTotalLabel').textContent = total.toLocaleString();
 }
 function renderNightlyInputs(existingPrices){
-  const checkIn = document.getElementById('h_checkIn').value;
-  const checkOut = document.getElementById('h_checkOut').value;
-  const nights = nightsBetween(checkIn, checkOut);
   const container = document.getElementById('nightlyPricesContainer');
-  if(nights.length === 0){
-    container.innerHTML = '<div style="font-size:.78rem;color:var(--muted);">退房日期需晚於入住日期</div>';
-    updateNightlyTotal();
-    return;
-  }
-  container.innerHTML = nights.map(d => `
-    <div style="display:flex; align-items:center; gap:8px;">
-      <span style="width:66px; font-size:.78rem; color:var(--muted); flex-shrink:0;">${d} 晚</span>
-      <input type="number" min="0" class="nightly-input" data-date="${d}" value="${existingPrices && existingPrices[d] !== undefined ? existingPrices[d] : ''}" placeholder="金額" style="flex:1; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:.82rem;">
+  container.innerHTML = DATES.map(d => `
+    <div class="nightly-cell">
+      <span class="nd-label">${d}</span>
+      <input type="number" min="0" class="nightly-input" data-date="${d}" value="${existingPrices && existingPrices[d] ? existingPrices[d] : ''}" placeholder="0">
     </div>
   `).join('');
   container.querySelectorAll('.nightly-input').forEach(inp => inp.addEventListener('input', updateNightlyTotal));
   updateNightlyTotal();
 }
-const h_checkInEl = document.getElementById('h_checkIn');
-const h_checkOutEl = document.getElementById('h_checkOut');
-[h_checkInEl, h_checkOutEl].forEach(sel => {
-  DATES.forEach(d => { const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
-});
-h_checkInEl.addEventListener('change', () => renderNightlyInputs(currentNightlyValues()));
-h_checkOutEl.addEventListener('change', () => renderNightlyInputs(currentNightlyValues()));
 
 function openHotelDialog(h, targetDate){
   document.getElementById('hotelDialogTitle').textContent = h ? '編輯飯店' : '新增飯店';
@@ -718,14 +703,17 @@ function openHotelDialog(h, targetDate){
   document.getElementById('h_pros').value = h ? (h.pros||'') : '';
   document.getElementById('h_cons').value = h ? (h.cons||'') : '';
 
-  const defaultCheckIn = h ? (h.checkIn || targetDate || DATES[0]) : (targetDate || DATES[0]);
-  const inIdx = DATES.indexOf(defaultCheckIn);
-  const defaultCheckOut = h ? (h.checkOut || DATES[Math.min(inIdx+1, DATES.length-1)]) : DATES[Math.min(inIdx+1, DATES.length-1)];
-  h_checkInEl.value = defaultCheckIn;
-  h_checkOutEl.value = defaultCheckOut;
   renderNightlyInputs(h ? (h.nightlyPrices||{}) : {});
 
   hotelDialog.showModal();
+}
+
+// 下一天的日期標籤（用於顯示退房日；若最後一晚是1/31，退房顯示2/1）
+function nextDateLabel(d){
+  const idx = DATES.indexOf(d);
+  if(idx < 0) return d;
+  if(idx === DATES.length-1) return '2/1';
+  return DATES[idx+1];
 }
 
 // 依地址關鍵字自動猜測北海道地區（英文/日文/中文都比對）
@@ -760,15 +748,24 @@ hotelForm.addEventListener('submit', () => {
   const id = document.getElementById('h_id').value;
   const existing = hotels.find(x => x.id === id);
   const targetDate = document.getElementById('h_targetDate').value || null;
-  const checkIn = h_checkInEl.value;
-  const checkOut = h_checkOutEl.value;
   const nightlyPrices = {};
   let priceSum = 0;
+  const pricedDates = [];
   document.querySelectorAll('.nightly-input').forEach(inp => {
     const v = Number(inp.value)||0;
-    nightlyPrices[inp.dataset.date] = v;
-    priceSum += v;
+    if(v > 0){
+      nightlyPrices[inp.dataset.date] = v;
+      priceSum += v;
+      pricedDates.push(inp.dataset.date);
+    }
   });
+  // 依實際有填金額的最早/最晚日期，自動推算入住與退房日
+  let checkIn = null, checkOut = null;
+  if(pricedDates.length > 0){
+    const sorted = pricedDates.slice().sort((a,b)=> DATES.indexOf(a)-DATES.indexOf(b));
+    checkIn = sorted[0];
+    checkOut = nextDateLabel(sorted[sorted.length-1]);
+  }
   const data = {
     id,
     assignedDate: existing ? existing.assignedDate : (targetDate || checkIn),
