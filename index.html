@@ -65,6 +65,21 @@
   }
   .total-box b{color:var(--gold); font-size:.95rem;}
 
+  #regionSummaryBar{
+    margin:14px 18px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+  }
+  #regionSummaryBar .region-chip{
+    display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line);
+    border-radius:20px; padding:5px 12px 5px 8px; font-size:.78rem; font-weight:600; color:var(--ink);
+  }
+  #regionSummaryBar .region-dot{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+  #regionSummaryBar .region-chip .cnt{color:var(--muted); font-weight:500;}
+
+  .day-side.has-region{border-right-width:5px;}
+  .day-side .region-tag{
+    margin-top:2px; font-size:.68rem; font-weight:700; padding:2px 8px; border-radius:10px; color:#fff;
+  }
+
   #layout{
     display:flex; gap:14px; padding:16px 18px 40px; align-items:flex-start;
   }
@@ -249,12 +264,15 @@
       已選 <b id="chosen-count">0</b>/9 天　住宿總額 NT$<b id="total-price">0</b>
     </div>
     <button class="btn btn-gold" id="exportBtn">📋 複製總覽</button>
+    <button class="btn btn-clay" id="importItineraryBtn">📥 貼上整週行程</button>
   </div>
 </header>
 
 <div id="config-banner">
   ⚠️ 尚未設定 Firebase,資料不會同步保存。請打開 <code>index.html</code>,把 <code>firebaseConfig</code> 換成你自己 Firebase 專案的設定值。
 </div>
+
+<div id="regionSummaryBar"></div>
 
 <div id="layout">
   <div id="board"></div>
@@ -379,6 +397,22 @@
   </div>
 </dialog>
 
+<!-- 貼上整週行程視窗 -->
+<dialog id="importDialog">
+  <div class="modal-inner" style="width:min(600px,90vw);">
+    <h3>📥 貼上整週行程</h3>
+    <p style="font-size:.78rem; color:var(--muted); margin-top:-8px; margin-bottom:10px;">
+      支援格式：每行以「Day 數字」開頭，例如「Day 1（1/23 五）：內容...（住地點）」。系統會依 Day 數字對應到 1/23 起算的日期，並自動抓「住XXX」當作當晚地點。貼上後會直接覆蓋對應日期的行程內容，請確認後再套用。
+    </p>
+    <textarea id="importTextarea" style="width:100%; min-height:260px; padding:10px; border:1px solid var(--line); border-radius:8px; font-size:.82rem; font-family:inherit; line-height:1.6;" placeholder="把整段行程文字貼在這裡..."></textarea>
+    <div id="importPreview" style="margin-top:10px; font-size:.78rem; color:var(--muted);"></div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="importCancelBtn">取消</button>
+      <button type="button" class="save-btn" id="importApplyBtn">解析並套用</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 /* ============ 1. Firebase 設定 ============ */
 const firebaseConfig = {
@@ -409,18 +443,30 @@ const REGIONS = ["札幌","小樽","函館","登別","洞爺湖","二世谷/新�
 let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
 let itinerary = {};    // { "1/23": "文字內容", ... } 每天一段共用純文字
+let dayRegion = {};    // { "1/23": "札幌", ... } 每天當晚住宿地點（用於統計與上色）
 let totalGuests = 8;
 let jpyRate = 0.219; // 1 日圓 = 多少台幣
+
+const REGION_COLOR_PALETTE = ["#4a7fb5","#c26b6b","#5a9e78","#b58a3f","#9b6fb0","#4a90a4","#c2914a","#7d6fc9","#3f8f6f","#a4744a","#5f7fc4","#c2568a"];
+const regionColorMap = {};
+function getRegionColor(region){
+  if(!region) return "#c7c0a9";
+  if(!regionColorMap[region]){
+    const idx = Object.keys(regionColorMap).length % REGION_COLOR_PALETTE.length;
+    regionColorMap[region] = REGION_COLOR_PALETTE[idx];
+  }
+  return regionColorMap[region];
+}
 
 /* ============ 3. 本機儲存 fallback ============ */
 const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; dayRegion = d.dayRegion || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, totalGuests, jpyRate})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, dayRegion, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -432,8 +478,9 @@ function watchFirestore(){
     showSyncError('讀取飯店資料失敗，請檢查 Firestore 規則是否已開放讀寫。');
   });
   db.collection('trip_data').doc('itineraryText').onSnapshot(snap=>{
-    if(snap.exists){ itinerary = snap.data().byDate || {}; }
+    if(snap.exists){ itinerary = snap.data().byDate || {}; dayRegion = snap.data().regionByDate || {}; }
     renderItineraryTextOnly();
+    renderRegionUI();
   }, err=>{ console.error('讀取 itineraryText 失敗', err); showSyncError('讀取行程資料失敗，請檢查 Firestore 規則。'); });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
     if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
@@ -485,12 +532,24 @@ function persistItinerary(date, text){
   if(itineraryDebounce) clearTimeout(itineraryDebounce);
   itineraryDebounce = setTimeout(() => {
     if(isConfigured && db){
-      db.collection('trip_data').doc('itineraryText').set({byDate: itinerary}).catch(err=>{
+      db.collection('trip_data').doc('itineraryText').set({byDate: itinerary, regionByDate: dayRegion}).catch(err=>{
         console.error('寫入 itineraryText 失敗', err);
         showSyncError('儲存行程內容到雲端失敗，你剛剛的編輯可能無法同步給其他人。');
       });
     }
   }, 500);
+}
+// 一次寫入整週行程與地區（貼上匯入用，不走debounce）
+function persistItineraryBulk(){
+  saveLocal();
+  if(isConfigured && db){
+    db.collection('trip_data').doc('itineraryText').set({byDate: itinerary, regionByDate: dayRegion}).then(()=>{
+      flashSaveSuccess();
+    }).catch(err=>{
+      console.error('寫入 itineraryText 失敗', err);
+      showSyncError('儲存行程內容到雲端失敗，你剛剛的編輯可能無法同步給其他人。');
+    });
+  }
 }
 function renderItineraryTextOnly(){
   document.querySelectorAll('.itinerary-box').forEach(ta => {
@@ -500,6 +559,35 @@ function renderItineraryTextOnly(){
       ta.value = itinerary[d] || '';
     }
   });
+}
+function renderRegionUI(){
+  // 更新每天左側日期區塊的顏色標示
+  document.querySelectorAll('.day-side').forEach(side => {
+    const d = side.dataset.date;
+    const region = dayRegion[d];
+    const tagEl = side.querySelector('.region-tag');
+    if(region){
+      side.style.borderRightColor = getRegionColor(region);
+      side.classList.add('has-region');
+      if(tagEl){ tagEl.textContent = region; tagEl.style.background = getRegionColor(region); tagEl.style.display = ''; }
+    } else {
+      side.style.borderRightColor = '';
+      side.classList.remove('has-region');
+      if(tagEl){ tagEl.style.display = 'none'; }
+    }
+  });
+  // 更新上方地區統計列
+  const counts = {};
+  DATES.forEach(d => { const r = dayRegion[d]; if(r) counts[r] = (counts[r]||0)+1; });
+  const bar = document.getElementById('regionSummaryBar');
+  const entries = Object.entries(counts);
+  if(entries.length === 0){ bar.innerHTML = ''; return; }
+  bar.innerHTML = entries.map(([region, count]) => `
+    <div class="region-chip">
+      <span class="region-dot" style="background:${getRegionColor(region)}"></span>
+      ${escapeHtml(region)} <span class="cnt">住${count}晚</span>
+    </div>
+  `).join('');
 }
 
 /* ============ 5. Render ============ */
@@ -534,9 +622,10 @@ function render(){
     const col = document.createElement('div');
     col.className = 'day-col';
     col.innerHTML = `
-      <div class="day-side">
+      <div class="day-side" data-date="${d}">
         <div class="d1">${d}<br><span style="color:var(--clay); font-size:.82rem;">（週${WEEK[idx]}）</span></div>
         <div class="d2">Day ${idx+1}</div>
+        <span class="region-tag" style="display:none;"></span>
       </div>
       <div class="day-body">
         <div class="day-section">
@@ -571,6 +660,7 @@ function render(){
   new Sortable(poolZone, { group:'hotelsShared', animation:150, onAdd:onDrop, onRemove:onDrop, onEnd:onDrop });
 
   updateHeaderTotal();
+  renderRegionUI();
 }
 
 function onDrop(){
@@ -839,7 +929,60 @@ document.getElementById('exportBtn').onclick = () => {
   navigator.clipboard.writeText(text).then(()=> alert('已複製到剪貼簿！可以貼到 LINE 群組。'));
 };
 
-/* ============ 10. 啟動 ============ */
+/* ============ 10. 貼上整週行程（自動解析） ============ */
+const importDialog = document.getElementById('importDialog');
+const importTextarea = document.getElementById('importTextarea');
+const importPreview = document.getElementById('importPreview');
+document.getElementById('importItineraryBtn').onclick = () => {
+  importTextarea.value = '';
+  importPreview.textContent = '';
+  importDialog.showModal();
+};
+document.getElementById('importCancelBtn').onclick = () => importDialog.close();
+
+function parseItineraryText(raw){
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const results = [];
+  const lineRe = /Day\s*(\d+)[（(]([^）)]*)[）)]\s*[:：]\s*(.*)/;
+  const regionRe = /住([^\s()（），,、]{1,12})/g;
+  function extractRegion(content){
+    let m, last = null;
+    while((m = regionRe.exec(content)) !== null){ last = m[1]; }
+    regionRe.lastIndex = 0;
+    return last;
+  }
+  lines.forEach(line => {
+    const cleaned = line.replace(/^[*\-•\s]+/, '');
+    const m = cleaned.match(lineRe);
+    if(!m) return;
+    const dayNum = parseInt(m[1]);
+    const content = m[3].trim();
+    const date = DATES[dayNum-1];
+    if(!date) return;
+    const region = extractRegion(content);
+    results.push({date, content, region});
+  });
+  return results;
+}
+
+document.getElementById('importApplyBtn').onclick = () => {
+  const parsed = parseItineraryText(importTextarea.value);
+  if(parsed.length === 0){
+    importPreview.innerHTML = '<span style="color:var(--clay);">沒有解析到符合格式的內容，請確認每行是否以「Day 數字（日期 星期）：」開頭。</span>';
+    return;
+  }
+  const overwriteDates = parsed.map(p => `${p.date}${p.region ? '（住'+p.region+'）' : ''}`).join('、');
+  if(!confirm(`即將套用以下 ${parsed.length} 天的行程，會覆蓋這幾天目前的內容：\n${overwriteDates}\n\n確定要套用嗎？`)) return;
+  parsed.forEach(p => {
+    itinerary[p.date] = p.content;
+    if(p.region) dayRegion[p.date] = p.region;
+  });
+  persistItineraryBulk();
+  render();
+  importDialog.close();
+};
+
+/* ============ 11. 啟動 ============ */
 loadLocal();
 render();
 if(isConfigured && db){
