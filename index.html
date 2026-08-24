@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <style>
   :root{
     --ink:#1f2a24;
@@ -64,6 +65,48 @@
     border-radius:6px; padding:6px 12px; font-size:.82rem; color:#f3efe2;
   }
   .total-box b{color:var(--gold); font-size:.95rem;}
+
+  #mainTabs{
+    display:flex; gap:6px; padding:14px 18px 0;
+  }
+  .main-tab{
+    border:none; background:#fff; border:1px solid var(--line); border-bottom:none;
+    padding:9px 18px; border-radius:10px 10px 0 0; font-size:.85rem; font-weight:700;
+    color:var(--muted); cursor:pointer;
+  }
+  .main-tab.active{background:var(--card); color:var(--moss-dk); border-color:var(--moss);}
+
+  #whiteboardTabs{
+    display:flex; gap:6px; overflow-x:auto; padding:14px 18px 0;
+  }
+  .wb-tab{
+    flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--ink);
+    padding:7px 14px; border-radius:8px; font-size:.8rem; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+  .wb-tab.active{background:var(--moss); color:#fff; border-color:var(--moss);}
+  .whiteboard-canvas{
+    position:relative; margin:14px 18px 40px; background:
+      linear-gradient(90deg, rgba(217,210,189,.5) 1px, transparent 1px) 0 0/24px 24px,
+      linear-gradient(0deg, rgba(217,210,189,.5) 1px, transparent 1px) 0 0/24px 24px,
+      var(--card);
+    border:1px solid var(--line); border-radius:var(--radius);
+    min-height:70vh; overflow:auto;
+  }
+  .whiteboard-hint{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    color:#c7c0a9; font-size:.85rem; text-align:center; pointer-events:none; width:80%;
+  }
+  .wb-image{
+    position:absolute; border:2px solid #fff; box-shadow:0 3px 10px rgba(0,0,0,.18);
+    border-radius:6px; cursor:grab; background:#fff;
+  }
+  .wb-image img{display:block; width:100%; height:auto; border-radius:4px; pointer-events:none; user-select:none;}
+  .wb-image:active{cursor:grabbing;}
+  .wb-image .wb-del{
+    position:absolute; top:-9px; right:-9px; width:22px; height:22px; border-radius:50%;
+    background:var(--clay); color:#fff; border:2px solid #fff; font-size:.75rem; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
 
   #regionSummaryBar{
     margin:14px 18px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
@@ -276,8 +319,14 @@
   ⚠️ 尚未設定 Firebase,資料不會同步保存。請打開 <code>index.html</code>,把 <code>firebaseConfig</code> 換成你自己 Firebase 專案的設定值。
 </div>
 
+<div id="mainTabs">
+  <button class="main-tab active" data-main-tab="board">🏨 訂房比較</button>
+  <button class="main-tab" data-main-tab="whiteboard">🖼️ 白板</button>
+</div>
+
 <div id="regionSummaryBar"></div>
 
+<div id="boardView">
 <div id="layout">
   <div id="board"></div>
 
@@ -297,6 +346,14 @@
       </div>
       <div class="drop-zone" id="poolZone" data-date=""></div>
     </div>
+  </div>
+</div>
+</div>
+
+<div id="whiteboardView" style="display:none;">
+  <div id="whiteboardTabs"></div>
+  <div id="whiteboardCanvas" class="whiteboard-canvas" tabindex="0">
+    <div class="whiteboard-hint">點這裡一下，再按 Ctrl+V（Mac 是 ⌘+V）貼上截圖，圖片會出現在這個白板上，可以自由拖曳擺放位置</div>
   </div>
 </div>
 
@@ -431,9 +488,11 @@ const firebaseConfig = {
 
 const isConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
 let db = null;
+let storage = null;
 if (isConfigured) {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  storage = firebase.storage();
 } else {
   document.getElementById('config-banner').style.display = 'block';
   document.getElementById('statusText').textContent = '未連接資料庫（本機模式）';
@@ -448,6 +507,8 @@ let regionFilterValue = "";
 let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,link,bookingLink,pros,cons,chosen,assignedDate:null|"1/23"}
 let itinerary = {};    // { "1/23": "文字內容", ... } 每天一段共用純文字
 let dayRegion = {};    // { "1/23": "札幌", ... } 每天當晚住宿地點（用於統計與上色）
+let whiteboardImages = {};  // { "1/23": [{id,url,x,y,width}], ... } 每天白板上貼的截圖
+let activeWbDate = null;
 let totalGuests = 8;
 let jpyRate = 0.219; // 1 日圓 = 多少台幣
 
@@ -467,10 +528,10 @@ const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; dayRegion = d.dayRegion || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; dayRegion = d.dayRegion || {}; whiteboardImages = d.whiteboardImages || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, dayRegion, totalGuests, jpyRate})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, dayRegion, whiteboardImages, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -486,6 +547,10 @@ function watchFirestore(){
     renderItineraryTextOnly();
     renderRegionUI();
   }, err=>{ console.error('讀取 itineraryText 失敗', err); showSyncError('讀取行程資料失敗，請檢查 Firestore 規則。'); });
+  db.collection('trip_data').doc('whiteboard').onSnapshot(snap=>{
+    if(snap.exists){ whiteboardImages = snap.data().byDate || {}; }
+    if(document.getElementById('whiteboardView').style.display !== 'none') renderWhiteboardImages();
+  }, err=>{ console.error('讀取 whiteboard 失敗', err); });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
     if(snap.exists && snap.data().totalGuests){ totalGuests = snap.data().totalGuests; }
     if(snap.exists && snap.data().jpyRate){ jpyRate = snap.data().jpyRate; }
@@ -986,7 +1051,129 @@ document.getElementById('importApplyBtn').onclick = () => {
   importDialog.close();
 };
 
-/* ============ 11. 啟動 ============ */
+/* ============ 11. 分頁切換（訂房比較 / 白板） ============ */
+document.querySelectorAll('.main-tab').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.mainTab;
+    document.getElementById('boardView').style.display = tab === 'board' ? '' : 'none';
+    document.getElementById('regionSummaryBar').style.display = tab === 'board' ? '' : 'none';
+    document.getElementById('whiteboardView').style.display = tab === 'whiteboard' ? '' : 'none';
+    if(tab === 'whiteboard'){ renderWhiteboardTabs(); renderWhiteboardImages(); }
+  };
+});
+
+/* ============ 12. 白板（貼上截圖收集資訊） ============ */
+activeWbDate = DATES[0];
+function renderWhiteboardTabs(){
+  const wrap = document.getElementById('whiteboardTabs');
+  wrap.innerHTML = DATES.map((d, idx) => `<button class="wb-tab ${d===activeWbDate?'active':''}" data-wb-date="${d}">${d}（週${WEEK[idx]}）</button>`).join('');
+  wrap.querySelectorAll('.wb-tab').forEach(b => {
+    b.onclick = () => { activeWbDate = b.dataset.wbDate; renderWhiteboardTabs(); renderWhiteboardImages(); };
+  });
+}
+function blobToDataURL(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function uploadWhiteboardImage(date, blob){
+  const id = uid();
+  if(isConfigured && storage){
+    try{
+      const ref = storage.ref().child(`whiteboard/${date}/${id}.png`);
+      await ref.put(blob);
+      const url = await ref.getDownloadURL();
+      return {id, url};
+    }catch(err){
+      console.error('圖片上傳到 Storage 失敗', err);
+      showSyncError('圖片上傳到雲端失敗，可能是 Firebase Storage 尚未開通（跟 Firestore 是不同服務）。這張圖片先暫存在你目前的瀏覽器，不會同步給其他人，請盡快開通 Storage。');
+    }
+  }
+  const dataUrl = await blobToDataURL(blob);
+  return {id, url: dataUrl};
+}
+function persistWhiteboard(){
+  saveLocal();
+  if(isConfigured && db){
+    db.collection('trip_data').doc('whiteboard').set({byDate: whiteboardImages}).catch(err=>{
+      console.error('寫入 whiteboard 失敗', err);
+      showSyncError('儲存白板資料到雲端失敗。');
+    });
+  }
+}
+function renderWhiteboardImages(){
+  const canvas = document.getElementById('whiteboardCanvas');
+  canvas.innerHTML = '';
+  const list = whiteboardImages[activeWbDate] || [];
+  if(list.length === 0){
+    canvas.innerHTML = '<div class="whiteboard-hint">點這裡一下，再按 Ctrl+V（Mac 是 ⌘+V）貼上截圖，圖片會出現在這個白板上，可以自由拖曳擺放位置</div>';
+    return;
+  }
+  list.forEach(imgData => {
+    const el = document.createElement('div');
+    el.className = 'wb-image';
+    el.style.left = (imgData.x||20) + 'px';
+    el.style.top = (imgData.y||20) + 'px';
+    el.style.width = (imgData.width||260) + 'px';
+    el.dataset.id = imgData.id;
+    el.innerHTML = `<img src="${imgData.url}" draggable="false"><div class="wb-del" data-del="${imgData.id}" title="刪除">✕</div>`;
+    canvas.appendChild(el);
+    el.querySelector('.wb-del').onclick = (e) => { e.stopPropagation(); deleteWhiteboardImage(imgData.id); };
+    makeWbDraggable(el, imgData);
+  });
+}
+function makeWbDraggable(el, imgData){
+  let dragging = false, startX, startY, origX, origY;
+  el.addEventListener('pointerdown', (e) => {
+    if(e.target.classList.contains('wb-del')) return;
+    dragging = true;
+    el.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+    origX = imgData.x || 20; origY = imgData.y || 20;
+  });
+  el.addEventListener('pointermove', (e) => {
+    if(!dragging) return;
+    imgData.x = origX + (e.clientX - startX);
+    imgData.y = origY + (e.clientY - startY);
+    el.style.left = imgData.x + 'px';
+    el.style.top = imgData.y + 'px';
+  });
+  el.addEventListener('pointerup', () => {
+    if(!dragging) return;
+    dragging = false;
+    persistWhiteboard();
+  });
+}
+function deleteWhiteboardImage(id){
+  if(!confirm('確定刪除這張圖片嗎？')) return;
+  whiteboardImages[activeWbDate] = (whiteboardImages[activeWbDate]||[]).filter(x => x.id !== id);
+  persistWhiteboard();
+  renderWhiteboardImages();
+}
+const whiteboardCanvasEl = document.getElementById('whiteboardCanvas');
+whiteboardCanvasEl.addEventListener('click', () => whiteboardCanvasEl.focus());
+whiteboardCanvasEl.addEventListener('paste', async (e) => {
+  const items = (e.clipboardData || window.clipboardData).items;
+  for(const item of items){
+    if(item.type.indexOf('image') !== -1){
+      e.preventDefault();
+      const blob = item.getAsFile();
+      const list = whiteboardImages[activeWbDate] || (whiteboardImages[activeWbDate] = []);
+      const offset = (list.length % 8) * 22;
+      const {id, url} = await uploadWhiteboardImage(activeWbDate, blob);
+      list.push({id, url, x: 20+offset, y: 20+offset, width: 280});
+      persistWhiteboard();
+      renderWhiteboardImages();
+    }
+  }
+});
+
+/* ============ 13. 啟動 ============ */
 loadLocal();
 render();
 if(isConfigured && db){
