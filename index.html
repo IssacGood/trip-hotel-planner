@@ -107,6 +107,11 @@
     background:var(--clay); color:#fff; border:2px solid #fff; font-size:.75rem; line-height:1;
     cursor:pointer; display:flex; align-items:center; justify-content:center;
   }
+  .wb-image .wb-resize{
+    position:absolute; bottom:-7px; right:-7px; width:16px; height:16px; border-radius:4px;
+    background:var(--moss); border:2px solid #fff; cursor:nwse-resize;
+    box-shadow:0 1px 4px rgba(0,0,0,.3);
+  }
 
   #regionSummaryBar{
     margin:14px 18px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
@@ -1121,16 +1126,17 @@ function renderWhiteboardImages(){
     el.style.top = (imgData.y||20) + 'px';
     el.style.width = (imgData.width||260) + 'px';
     el.dataset.id = imgData.id;
-    el.innerHTML = `<img src="${imgData.url}" draggable="false"><div class="wb-del" data-del="${imgData.id}" title="刪除">✕</div>`;
+    el.innerHTML = `<img src="${imgData.url}" draggable="false"><div class="wb-del" data-del="${imgData.id}" title="刪除">✕</div><div class="wb-resize" title="拖曳調整大小"></div>`;
     canvas.appendChild(el);
     el.querySelector('.wb-del').onclick = (e) => { e.stopPropagation(); deleteWhiteboardImage(imgData.id); };
     makeWbDraggable(el, imgData);
+    makeWbResizable(el, imgData);
   });
 }
 function makeWbDraggable(el, imgData){
   let dragging = false, startX, startY, origX, origY;
   el.addEventListener('pointerdown', (e) => {
-    if(e.target.classList.contains('wb-del')) return;
+    if(e.target.classList.contains('wb-del') || e.target.classList.contains('wb-resize')) return;
     dragging = true;
     el.setPointerCapture(e.pointerId);
     startX = e.clientX; startY = e.clientY;
@@ -1146,6 +1152,28 @@ function makeWbDraggable(el, imgData){
   el.addEventListener('pointerup', () => {
     if(!dragging) return;
     dragging = false;
+    persistWhiteboard();
+  });
+}
+function makeWbResizable(el, imgData){
+  const handle = el.querySelector('.wb-resize');
+  let resizing = false, startX, startWidth;
+  handle.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    resizing = true;
+    handle.setPointerCapture(e.pointerId);
+    startX = e.clientX;
+    startWidth = imgData.width || el.offsetWidth || 260;
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if(!resizing) return;
+    const newWidth = Math.max(80, startWidth + (e.clientX - startX));
+    imgData.width = newWidth;
+    el.style.width = newWidth + 'px';
+  });
+  handle.addEventListener('pointerup', (e) => {
+    if(!resizing) return;
+    resizing = false;
     persistWhiteboard();
   });
 }
