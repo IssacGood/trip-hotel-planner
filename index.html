@@ -113,6 +113,49 @@
     box-shadow:0 1px 4px rgba(0,0,0,.3);
   }
 
+  #whiteboardToolbar{
+    display:flex; align-items:center; gap:12px; padding:10px 18px 0;
+  }
+
+  .wb-text{
+    position:absolute; min-width:120px; min-height:44px; padding:0; border-radius:8px;
+    box-shadow:0 3px 10px rgba(0,0,0,.15); cursor:grab;
+  }
+  .wb-text:active{cursor:grabbing;}
+  .wb-text-inner{
+    padding:10px 12px; font-size:.85rem; line-height:1.5; white-space:pre-wrap; word-break:break-word;
+    min-height:44px; outline:none; cursor:text;
+  }
+  .wb-text .wb-del{
+    position:absolute; top:-9px; right:-9px; width:20px; height:20px; border-radius:50%;
+    background:var(--clay); color:#fff; border:2px solid #fff; font-size:.68rem; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .wb-text .wb-resize{
+    position:absolute; bottom:-7px; right:-7px; width:14px; height:14px; border-radius:4px;
+    background:rgba(0,0,0,.35); border:2px solid #fff; cursor:nwse-resize;
+  }
+  .wb-text .wb-color-btn{
+    position:absolute; top:-9px; left:-9px; width:20px; height:20px; border-radius:50%;
+    border:2px solid #fff; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.3);
+  }
+  .wb-text-yellow{background:#fdf1b8;}
+  .wb-text-blue{background:#cfe4f7;}
+  .wb-text-pink{background:#f9d7e6;}
+
+  #cropStage{
+    position:relative; background:#1b1b1b; border-radius:8px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; max-height:60vh;
+  }
+  #cropImg{display:block; max-width:100%; max-height:60vh; user-select:none;}
+  #cropBox{
+    position:absolute; border:2px dashed #fff; box-shadow:0 0 0 2000px rgba(0,0,0,.5); cursor:move;
+  }
+  #cropHandle{
+    position:absolute; right:-7px; bottom:-7px; width:16px; height:16px; border-radius:4px;
+    background:#fff; cursor:nwse-resize;
+  }
+
   #regionSummaryBar{
     margin:14px 18px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
   }
@@ -357,10 +400,30 @@
 
 <div id="whiteboardView" style="display:none;">
   <div id="whiteboardTabs"></div>
+  <div id="whiteboardToolbar">
+    <button class="add-mini" id="addTextBoxBtn">📝 新增文字方塊</button>
+    <span style="font-size:.75rem; color:var(--muted);">雙擊圖片可以裁切</span>
+  </div>
   <div id="whiteboardCanvas" class="whiteboard-canvas" tabindex="0">
     <div class="whiteboard-hint">點這裡一下，再按 Ctrl+V（Mac 是 ⌘+V）貼上截圖，圖片會出現在這個白板上，可以自由拖曳擺放位置</div>
   </div>
 </div>
+
+<!-- 裁切圖片視窗 -->
+<dialog id="cropDialog">
+  <div class="modal-inner" style="width:min(680px,94vw);">
+    <h3>✂️ 裁切圖片</h3>
+    <p style="font-size:.78rem; color:var(--muted); margin-top:-8px; margin-bottom:10px;">拖曳選取框調整位置，拖右下角把手調整大小，完成後按套用。</p>
+    <div id="cropStage">
+      <img id="cropImg" draggable="false" crossorigin="anonymous">
+      <div id="cropBox"><div id="cropHandle"></div></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="cropCancelBtn">取消</button>
+      <button type="button" class="save-btn" id="cropApplyBtn">套用裁切</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- 飯店編輯視窗 -->
 <dialog id="hotelDialog">
@@ -513,6 +576,7 @@ let hotels = [];      // 扁平陣列: {id,name,capacity,price,breakfast,dinner,
 let itinerary = {};    // { "1/23": "文字內容", ... } 每天一段共用純文字
 let dayRegion = {};    // { "1/23": "札幌", ... } 每天當晚住宿地點（用於統計與上色）
 let whiteboardImages = {};  // { "1/23": [{id,url,x,y,width}], ... } 每天白板上貼的截圖
+let whiteboardTexts = {};   // { "1/23": [{id,text,color,x,y,width}], ... } 每天白板上的文字方塊
 let activeWbDate = null;
 let totalGuests = 8;
 let jpyRate = 0.219; // 1 日圓 = 多少台幣
@@ -533,10 +597,10 @@ const LOCAL_KEY = 'trip_planner_local_v2';
 function loadLocal(){
   try{
     const raw = localStorage.getItem(LOCAL_KEY);
-    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; dayRegion = d.dayRegion || {}; whiteboardImages = d.whiteboardImages || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
+    if(raw){ const d = JSON.parse(raw); hotels = d.hotels || []; itinerary = d.itinerary || {}; dayRegion = d.dayRegion || {}; whiteboardImages = d.whiteboardImages || {}; whiteboardTexts = d.whiteboardTexts || {}; totalGuests = d.totalGuests || 8; jpyRate = d.jpyRate || 0.219; }
   }catch(e){}
 }
-function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, dayRegion, whiteboardImages, totalGuests, jpyRate})); }
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify({hotels, itinerary, dayRegion, whiteboardImages, whiteboardTexts, totalGuests, jpyRate})); }
 
 /* ============ 4. Firestore 讀寫 ============ */
 function watchFirestore(){
@@ -553,7 +617,7 @@ function watchFirestore(){
     renderRegionUI();
   }, err=>{ console.error('讀取 itineraryText 失敗', err); showSyncError('讀取行程資料失敗，請檢查 Firestore 規則。'); });
   db.collection('trip_data').doc('whiteboard').onSnapshot(snap=>{
-    if(snap.exists){ whiteboardImages = snap.data().byDate || {}; }
+    if(snap.exists){ whiteboardImages = snap.data().byDate || {}; whiteboardTexts = snap.data().textsByDate || {}; }
     if(document.getElementById('whiteboardView').style.display !== 'none') renderWhiteboardImages();
   }, err=>{ console.error('讀取 whiteboard 失敗', err); });
   db.collection('trip_data').doc('settings').onSnapshot(snap=>{
@@ -1070,10 +1134,11 @@ document.querySelectorAll('.main-tab').forEach(btn => {
 });
 
 /* ============ 12. 白板（貼上截圖收集資訊） ============ */
-activeWbDate = DATES[0];
+const WB_DATES = DATES.slice(0, DATES.length-1); // 最後一天返程不住宿，白板不用顯示
+activeWbDate = WB_DATES[0];
 function renderWhiteboardTabs(){
   const wrap = document.getElementById('whiteboardTabs');
-  wrap.innerHTML = DATES.map((d, idx) => `<button class="wb-tab ${d===activeWbDate?'active':''}" data-wb-date="${d}">${d}（週${WEEK[idx]}）</button>`).join('');
+  wrap.innerHTML = WB_DATES.map((d, idx) => `<button class="wb-tab ${d===activeWbDate?'active':''}" data-wb-date="${d}">${d}（週${WEEK[idx]}）</button>`).join('');
   wrap.querySelectorAll('.wb-tab').forEach(b => {
     b.onclick = () => { activeWbDate = b.dataset.wbDate; renderWhiteboardTabs(); renderWhiteboardImages(); };
   });
@@ -1105,7 +1170,7 @@ async function uploadWhiteboardImage(date, blob){
 function persistWhiteboard(){
   saveLocal();
   if(isConfigured && db){
-    db.collection('trip_data').doc('whiteboard').set({byDate: whiteboardImages}).catch(err=>{
+    db.collection('trip_data').doc('whiteboard').set({byDate: whiteboardImages, textsByDate: whiteboardTexts}).catch(err=>{
       console.error('寫入 whiteboard 失敗', err);
       showSyncError('儲存白板資料到雲端失敗。');
     });
@@ -1114,12 +1179,13 @@ function persistWhiteboard(){
 function renderWhiteboardImages(){
   const canvas = document.getElementById('whiteboardCanvas');
   canvas.innerHTML = '';
-  const list = whiteboardImages[activeWbDate] || [];
-  if(list.length === 0){
+  const imgList = whiteboardImages[activeWbDate] || [];
+  const textList = whiteboardTexts[activeWbDate] || [];
+  if(imgList.length === 0 && textList.length === 0){
     canvas.innerHTML = '<div class="whiteboard-hint">點這裡一下，再按 Ctrl+V（Mac 是 ⌘+V）貼上截圖，圖片會出現在這個白板上，可以自由拖曳擺放位置</div>';
     return;
   }
-  list.forEach(imgData => {
+  imgList.forEach(imgData => {
     const el = document.createElement('div');
     el.className = 'wb-image';
     el.style.left = (imgData.x||20) + 'px';
@@ -1129,33 +1195,91 @@ function renderWhiteboardImages(){
     el.innerHTML = `<img src="${imgData.url}" draggable="false"><div class="wb-del" data-del="${imgData.id}" title="刪除">✕</div><div class="wb-resize" title="拖曳調整大小"></div>`;
     canvas.appendChild(el);
     el.querySelector('.wb-del').onclick = (e) => { e.stopPropagation(); deleteWhiteboardImage(imgData.id); };
+    el.querySelector('img').addEventListener('dblclick', (e) => { e.stopPropagation(); openCropDialog(imgData); });
     makeWbDraggable(el, imgData);
     makeWbResizable(el, imgData);
   });
+  textList.forEach(textData => renderTextBox(canvas, textData));
 }
-function makeWbDraggable(el, imgData){
+
+const TEXT_COLORS = ['yellow','blue','pink'];
+function nextTextColor(c){
+  const idx = TEXT_COLORS.indexOf(c);
+  return TEXT_COLORS[(idx+1) % TEXT_COLORS.length];
+}
+function renderTextBox(canvas, textData){
+  const el = document.createElement('div');
+  el.className = `wb-text wb-text-${textData.color || 'yellow'}`;
+  el.style.left = (textData.x||20) + 'px';
+  el.style.top = (textData.y||20) + 'px';
+  el.style.width = (textData.width||180) + 'px';
+  el.dataset.id = textData.id;
+  el.innerHTML = `
+    <div class="wb-text-inner" contenteditable="true">${escapeHtml(textData.text||'')}</div>
+    <div class="wb-color-btn" title="切換顏色"></div>
+    <div class="wb-del" title="刪除">✕</div>
+    <div class="wb-resize" title="拖曳調整大小"></div>
+  `;
+  canvas.appendChild(el);
+
+  const inner = el.querySelector('.wb-text-inner');
+  el.querySelector('.wb-del').onclick = (e) => { e.stopPropagation(); deleteWhiteboardText(textData.id); };
+  el.querySelector('.wb-color-btn').onclick = (e) => {
+    e.stopPropagation();
+    textData.color = nextTextColor(textData.color || 'yellow');
+    el.className = `wb-text wb-text-${textData.color}`;
+    persistWhiteboard();
+  };
+  inner.addEventListener('input', () => {
+    textData.text = inner.textContent;
+    persistWhiteboardTextDebounced();
+  });
+  inner.addEventListener('blur', () => { persistWhiteboard(); });
+  makeWbDraggable(el, textData, true);
+  makeWbResizable(el, textData);
+}
+let textDebounceTimer = null;
+function persistWhiteboardTextDebounced(){
+  saveLocal();
+  if(textDebounceTimer) clearTimeout(textDebounceTimer);
+  textDebounceTimer = setTimeout(() => persistWhiteboard(), 600);
+}
+
+function makeWbDraggable(el, dataObj, isEditable){
   let dragging = false, startX, startY, origX, origY;
   el.addEventListener('pointerdown', (e) => {
-    if(e.target.classList.contains('wb-del') || e.target.classList.contains('wb-resize')) return;
+    if(e.target.classList.contains('wb-del') || e.target.classList.contains('wb-resize') || e.target.classList.contains('wb-color-btn')) return;
+    if(isEditable) return; // 文字方塊本身可編輯，改用外框拖曳（見下方 mousedown on non-text area 判斷）
     dragging = true;
     el.setPointerCapture(e.pointerId);
     startX = e.clientX; startY = e.clientY;
-    origX = imgData.x || 20; origY = imgData.y || 20;
+    origX = dataObj.x || 20; origY = dataObj.y || 20;
   });
   el.addEventListener('pointermove', (e) => {
     if(!dragging) return;
-    imgData.x = origX + (e.clientX - startX);
-    imgData.y = origY + (e.clientY - startY);
-    el.style.left = imgData.x + 'px';
-    el.style.top = imgData.y + 'px';
+    dataObj.x = origX + (e.clientX - startX);
+    dataObj.y = origY + (e.clientY - startY);
+    el.style.left = dataObj.x + 'px';
+    el.style.top = dataObj.y + 'px';
   });
   el.addEventListener('pointerup', () => {
     if(!dragging) return;
     dragging = false;
     persistWhiteboard();
   });
+  if(isEditable){
+    // 文字方塊：用 alt+拖曳 或 拖曳邊緣（非文字聚焦時）搬動；改用簡單策略：未聚焦編輯時可拖曳整塊
+    el.addEventListener('pointerdown', (e) => {
+      if(e.target.classList.contains('wb-del') || e.target.classList.contains('wb-resize') || e.target.classList.contains('wb-color-btn')) return;
+      if(el.contains(document.activeElement) && document.activeElement !== el) return; // 正在打字時不觸發拖曳
+      dragging = true;
+      el.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+      origX = dataObj.x || 20; origY = dataObj.y || 20;
+    });
+  }
 }
-function makeWbResizable(el, imgData){
+function makeWbResizable(el, dataObj){
   const handle = el.querySelector('.wb-resize');
   let resizing = false, startX, startWidth;
   handle.addEventListener('pointerdown', (e) => {
@@ -1163,12 +1287,12 @@ function makeWbResizable(el, imgData){
     resizing = true;
     handle.setPointerCapture(e.pointerId);
     startX = e.clientX;
-    startWidth = imgData.width || el.offsetWidth || 260;
+    startWidth = dataObj.width || el.offsetWidth || 260;
   });
   handle.addEventListener('pointermove', (e) => {
     if(!resizing) return;
     const newWidth = Math.max(80, startWidth + (e.clientX - startX));
-    imgData.width = newWidth;
+    dataObj.width = newWidth;
     el.style.width = newWidth + 'px';
   });
   handle.addEventListener('pointerup', (e) => {
@@ -1183,6 +1307,23 @@ function deleteWhiteboardImage(id){
   persistWhiteboard();
   renderWhiteboardImages();
 }
+function deleteWhiteboardText(id){
+  whiteboardTexts[activeWbDate] = (whiteboardTexts[activeWbDate]||[]).filter(x => x.id !== id);
+  persistWhiteboard();
+  renderWhiteboardImages();
+}
+document.getElementById('addTextBoxBtn').onclick = () => {
+  const list = whiteboardTexts[activeWbDate] || (whiteboardTexts[activeWbDate] = []);
+  const offset = (list.length % 8) * 20;
+  const textData = {id: uid(), text: '', color: 'yellow', x: 40+offset, y: 40+offset, width: 200};
+  list.push(textData);
+  persistWhiteboard();
+  renderWhiteboardImages();
+  setTimeout(() => {
+    const el = document.querySelector(`.wb-text[data-id="${textData.id}"] .wb-text-inner`);
+    if(el) el.focus();
+  }, 30);
+};
 const whiteboardCanvasEl = document.getElementById('whiteboardCanvas');
 whiteboardCanvasEl.addEventListener('click', () => whiteboardCanvasEl.focus());
 whiteboardCanvasEl.addEventListener('paste', async (e) => {
@@ -1201,7 +1342,98 @@ whiteboardCanvasEl.addEventListener('paste', async (e) => {
   }
 });
 
-/* ============ 13. 啟動 ============ */
+/* ============ 13. 裁切圖片 ============ */
+const cropDialog = document.getElementById('cropDialog');
+const cropImg = document.getElementById('cropImg');
+const cropStage = document.getElementById('cropStage');
+const cropBox = document.getElementById('cropBox');
+const cropHandle = document.getElementById('cropHandle');
+let cropTarget = null;
+let cropRect = {x:0, y:0, w:100, h:100};
+
+function setCropBoxUI(){
+  cropBox.style.left = cropRect.x + 'px';
+  cropBox.style.top = cropRect.y + 'px';
+  cropBox.style.width = cropRect.w + 'px';
+  cropBox.style.height = cropRect.h + 'px';
+}
+function openCropDialog(imgData){
+  cropTarget = imgData;
+  cropImg.src = imgData.url;
+  cropImg.onload = () => {
+    const w = cropImg.clientWidth, h = cropImg.clientHeight;
+    cropRect = {x: w*0.1, y: h*0.1, w: w*0.8, h: h*0.8};
+    setCropBoxUI();
+  };
+  cropDialog.showModal();
+}
+document.getElementById('cropCancelBtn').onclick = () => cropDialog.close();
+
+// 拖曳整個選取框移動
+(function(){
+  let dragging=false, startX, startY, origX, origY;
+  cropBox.addEventListener('pointerdown', (e) => {
+    if(e.target === cropHandle) return;
+    dragging = true;
+    cropBox.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+    origX = cropRect.x; origY = cropRect.y;
+  });
+  cropBox.addEventListener('pointermove', (e) => {
+    if(!dragging) return;
+    const stageW = cropImg.clientWidth, stageH = cropImg.clientHeight;
+    cropRect.x = Math.min(Math.max(0, origX + (e.clientX-startX)), stageW - cropRect.w);
+    cropRect.y = Math.min(Math.max(0, origY + (e.clientY-startY)), stageH - cropRect.h);
+    setCropBoxUI();
+  });
+  cropBox.addEventListener('pointerup', () => { dragging = false; });
+})();
+// 拖曳右下角把手調整選取框大小
+(function(){
+  let resizing=false, startX, startY, origW, origH;
+  cropHandle.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    resizing = true;
+    cropHandle.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+    origW = cropRect.w; origH = cropRect.h;
+  });
+  cropHandle.addEventListener('pointermove', (e) => {
+    if(!resizing) return;
+    const stageW = cropImg.clientWidth, stageH = cropImg.clientHeight;
+    cropRect.w = Math.max(30, Math.min(origW + (e.clientX-startX), stageW - cropRect.x));
+    cropRect.h = Math.max(30, Math.min(origH + (e.clientY-startY), stageH - cropRect.y));
+    setCropBoxUI();
+  });
+  cropHandle.addEventListener('pointerup', () => { resizing = false; });
+})();
+
+document.getElementById('cropApplyBtn').onclick = async () => {
+  if(!cropTarget) return;
+  try{
+    const scaleX = cropImg.naturalWidth / cropImg.clientWidth;
+    const scaleY = cropImg.naturalHeight / cropImg.clientHeight;
+    const sx = cropRect.x * scaleX, sy = cropRect.y * scaleY;
+    const sw = cropRect.w * scaleX, sh = cropRect.h * scaleY;
+    const canvas = document.createElement('canvas');
+    canvas.width = sw; canvas.height = sh;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cropImg, sx, sy, sw, sh, 0, 0, sw, sh);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if(!blob) throw new Error('canvas toBlob 失敗');
+    const {id, url} = await uploadWhiteboardImage(activeWbDate, blob);
+    cropTarget.url = url;
+    cropTarget.width = Math.min(cropTarget.width || 280, 400);
+    persistWhiteboard();
+    renderWhiteboardImages();
+    cropDialog.close();
+  }catch(err){
+    console.error('裁切失敗', err);
+    alert('裁切失敗，很可能是這張圖片存在 Firebase Storage 上，瀏覽器基於安全限制（CORS）不允許在畫布上處理跨網域圖片。\n\n解決方式：需要幫這個 Storage bucket 設定 CORS，請告訴我，我可以教你怎麼設定。');
+  }
+};
+
+/* ============ 14. 啟動 ============ */
 loadLocal();
 render();
 if(isConfigured && db){
